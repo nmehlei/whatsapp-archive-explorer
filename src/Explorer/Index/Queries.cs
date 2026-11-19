@@ -34,6 +34,10 @@ public sealed record SearchHit(long ChatId, string? ChatName, long MessageId, lo
 
 public sealed record Page<T>(IReadOnlyList<T> Items, bool HasMoreBefore, bool HasMoreAfter);
 
+public sealed record MediaItem(long Id, long Ts, string Url, string? Mime, string? Caption);
+
+public sealed record MediaPage(IReadOnlyList<MediaItem> Items, int Total);
+
 public sealed class Queries(SqliteConnection connection)
 {
     private const string MessageColumns = """
@@ -129,6 +133,35 @@ public sealed class Queries(SqliteConnection connection)
         var (newest, hasMore) = Fetch(chatId, "1 = 1", (0, 0), descending: true, limit);
         newest.Reverse();
         return new Page<MessageDto>(newest, hasMore, false);
+    }
+
+    /// <summary>Media messages of a chat (images, videos, audio, documents), newest first.</summary>
+    public MediaPage Media(long chatId, int offset, int limit = 60)
+    {
+        using var count = connection.CreateCommand();
+        count.CommandText = "SELECT count(*) FROM messages WHERE chat_rowid = $c AND is_media = 1 AND media_path IS NOT NULL";
+        count.Parameters.AddWithValue("$c", chatId);
+        var total = Convert.ToInt32(count.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT rowid, ts, media_path, mime, caption FROM messages
+            WHERE chat_rowid = $c AND is_media = 1 AND media_path IS NOT NULL
+            ORDER BY ts DESC, rowid DESC LIMIT $limit OFFSET $offset
+            """;
+        cmd.Parameters.AddWithValue("$c", chatId);
+        cmd.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 500));
+        cmd.Parameters.AddWithValue("$offset", Math.Max(0, offset));
+        var items = new List<MediaItem>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            if (HtmlSafe.MediaUrl(r.GetString(2)) is { } url)
+            {
+                items.Add(new MediaItem(r.GetInt64(0), r.GetInt64(1), url, NullableString(r, 3), NullableString(r, 4)));
+            }
+        }
+        return new MediaPage(items, total);
     }
 
     /// <summary>Ids of the messages in a chat that match, oldest first.</summary>

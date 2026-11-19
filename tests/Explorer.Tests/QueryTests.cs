@@ -140,6 +140,21 @@ public sealed class QueryTests : IDisposable
         Assert.Equal(ids.Order(), ids);
     }
 
+    [Fact]
+    public void Media_ListsChatMediaNewestFirst_WithPaging()
+    {
+        var chat = BusiestPrivateChat();
+
+        var first = _q.Media(chat.Id, 0, 5);
+        var all = _q.Media(chat.Id, 0, 500);
+
+        Assert.NotEmpty(all.Items);
+        Assert.All(all.Items, m => Assert.StartsWith("/media/", m.Url, StringComparison.Ordinal));
+        Assert.Equal(all.Items.OrderByDescending(m => m.Ts).ThenByDescending(m => m.Id).Select(m => m.Id), all.Items.Select(m => m.Id));
+        Assert.Equal(all.Items.Take(5).Select(m => m.Id), first.Items.Select(m => m.Id));
+        Assert.Equal(all.Items.Count, first.Total);
+    }
+
     [Theory]
     [InlineData("\"")]
     [InlineData("*")]

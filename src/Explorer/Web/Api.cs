@@ -29,6 +29,9 @@ public static class Api
         app.MapGet("/api/chats/{id:long}/search", (long id, string? q) =>
             WithQueries(state, queries => Results.Json(queries.SearchInChat(id, q ?? ""))));
 
+        app.MapGet("/api/chats/{id:long}/media", (long id, int? offset, int? limit) =>
+            WithQueries(state, queries => Results.Json(queries.Media(id, offset ?? 0, limit ?? 60))));
+
         app.MapGet("/api/chats/{id:long}/avatar", (long id) =>
             WithQueries(state, queries => queries.AvatarPath(id) is { } path ? media.Serve(path) : Results.NotFound()));
 

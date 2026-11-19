@@ -116,6 +116,8 @@ public sealed class WebTests : IAsyncLifetime
         Assert.Equal(messageId, inChat[0].GetInt64());
 
         Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync("/api/chats/999999/messages")).StatusCode);
+        var media = await Json($"/api/chats/{chatId}/media?limit=3");
+        Assert.True(media.GetProperty("total").GetInt32() >= media.GetProperty("items").GetArrayLength());
     }
 
     [Fact]
