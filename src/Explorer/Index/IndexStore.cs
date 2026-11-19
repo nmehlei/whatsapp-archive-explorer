@@ -18,13 +18,28 @@ public sealed class IndexStore : IDisposable
 {
     private readonly string _archiveRoot;
 
-    private IndexStore(string archiveRoot, SqliteConnection connection)
+    private IndexStore(string archiveRoot, SqliteConnection connection, string connectionString)
     {
         _archiveRoot = archiveRoot;
         Connection = connection;
+        ConnectionString = connectionString;
     }
 
+    /// <summary>The writer connection (also keeps an in-memory index alive).</summary>
     public SqliteConnection Connection { get; }
+
+    public string ConnectionString { get; }
+
+    /// <summary>A separate read-only connection, e.g. one per web request.</summary>
+    public SqliteConnection OpenReader()
+    {
+        var reader = new SqliteConnection(ConnectionString);
+        reader.Open();
+        using var cmd = reader.CreateCommand();
+        cmd.CommandText = "PRAGMA query_only = 1";
+        cmd.ExecuteNonQuery();
+        return reader;
+    }
 
     /// <param name="dbPath">Index file; <c>null</c> keeps the index in memory.</param>
     public static IndexStore Open(string archiveRoot, string? dbPath)
@@ -52,7 +67,7 @@ public sealed class IndexStore : IDisposable
         {
             Reset(connection);
         }
-        return new IndexStore(Path.GetFullPath(archiveRoot), connection);
+        return new IndexStore(Path.GetFullPath(archiveRoot), connection, connectionString);
     }
 
     public RefreshResult Refresh(IProgress<IndexProgress>? progress)
