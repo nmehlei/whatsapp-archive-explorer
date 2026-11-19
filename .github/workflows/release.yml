@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { rid: osx-x64, os: macos-latest, archive: tar.gz }
+          - { rid: osx-arm64, os: macos-latest, archive: tar.gz }
+          - { rid: linux-x64, os: ubuntu-latest, archive: tar.gz }
+          - { rid: linux-arm64, os: ubuntu-latest, archive: tar.gz }
+          - { rid: win-x64, os: windows-latest, archive: zip }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - name: Version (GitVersion 5, Mainline)
+        id: version
+        shell: bash
+        run: |
+          dotnet tool install --global GitVersion.Tool --version 5.12.0
+          echo "semver=$(dotnet-gitversion /showvariable SemVer)" >> "$GITHUB_OUTPUT"
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish src/Explorer -c Release -r ${{ matrix.rid }} -o out \
+            -p:Version=${{ steps.version.outputs.semver }} -p:InformationalVersion=${{ steps.version.outputs.semver }}
+          cp LICENSE README.md out/
+      - name: Package
+        shell: bash
+        run: |
+          name=whatsapp-archive-explorer-${{ steps.version.outputs.semver }}-${{ matrix.rid }}
+          if [ "${{ matrix.archive }}" = zip ]; then
+            7z a "$name.zip" ./out/* > /dev/null
+          else
+            tar -czf "$name.tar.gz" -C out .
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.rid }}
+          path: whatsapp-archive-explorer-*.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum whatsapp-archive-explorer-* > SHA256SUMS
+      - uses: sigstore/cosign-installer@v4
+      - name: Sign checksums (keyless)
+        working-directory: dist
+        run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/whatsapp-archive-explorer-*
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true

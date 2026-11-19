@@ -73,7 +73,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
       const index = items.findIndex((m) => m.id === messageId);
       if (index >= 0) {
         setHighlight(messageId);
-        virtuoso.current?.scrollToIndex({ index, align: "center", behavior: "smooth" });
+        virtuoso.current?.scrollToIndex({ index, align: "center", behavior: "auto" });
       } else {
         onTarget(messageId);
       }

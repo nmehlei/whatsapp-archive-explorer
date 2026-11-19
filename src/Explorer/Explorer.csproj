@@ -5,6 +5,19 @@
     <AssemblyName>whatsapp-archive-explorer</AssemblyName>
     <RootNamespace>ArchiveExplorer</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- No user secrets, no launch profiles: a portable tool. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+  </PropertyGroup>
+
+  <!-- dotnet publish -r <rid> -c Release → one self-contained executable (no .NET install needed). -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
