@@ -9,6 +9,7 @@ export interface ChatSummary {
   lastTs: number | null;
   lastPreview: string | null;
   messageCount: number;
+  hidden: boolean;
 }
 
 export interface Message {
@@ -62,6 +63,7 @@ export interface Status {
   filesTotal: number;
   chats: number;
   messages: number;
+  hiddenChats: number;
 }
 
 export interface SearchFilters {

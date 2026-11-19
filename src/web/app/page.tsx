@@ -35,6 +35,7 @@ export default function Home() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [route, setRoute] = useState<Route>({ chat: null, msg: null });
   const [terms, setTerms] = useState<string[]>([]);
+  const [showHidden, setShowHidden] = useState(false);
 
   useEffect(() => {
     // Browser-only values (language, URL) are read after the first render; the static HTML is language-neutral.
@@ -56,10 +57,7 @@ export default function Home() {
         const s = await api.status();
         if (cancelled) return;
         setStatus(s);
-        if (s.state === "ready") {
-          setChats(await api.chats());
-          return;
-        }
+        if (s.state === "ready") return;
         if (s.state === "error") return;
       } catch {
         // server restarting: keep polling
@@ -71,6 +69,14 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  // (Re)load the chat list once ready, and whenever hidden chats are switched on or off.
+  useEffect(() => {
+    if (status?.state !== "ready") return;
+    const ctl = new AbortController();
+    api.chats(undefined, showHidden, ctl.signal).then(setChats, () => undefined);
+    return () => ctl.abort();
+  }, [status?.state, showHidden]);
 
   const navigate = useCallback((next: Route, push = true) => {
     setRoute(next);
@@ -92,6 +98,9 @@ export default function Home() {
       <main className={`app${selected ? " has-chat" : ""}`}>
         <Sidebar
           chats={chats}
+          hiddenCount={status.hiddenChats}
+          showHidden={showHidden}
+          onShowHidden={setShowHidden}
           selectedId={selected?.id ?? null}
           onSelectChat={(c) => {
             setTerms([]);

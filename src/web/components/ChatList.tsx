@@ -21,7 +21,10 @@ export function ChatRow({ chat, selected, onSelect }: { chat: ChatSummary; selec
       <Avatar chat={chat} />
       <span className="chat-row-body">
         <span className="chat-row-top">
-          <span className="chat-row-name">{chat.kind === "calls" ? t("calls") : displayName(chat)}</span>
+          <span className="chat-row-name">
+            {chat.kind === "calls" ? t("calls") : displayName(chat)}
+            {chat.hidden && <span className="badge hidden-badge">{t("hiddenBadge")}</span>}
+          </span>
           {chat.lastTs !== null && <span className="chat-row-date">{formatListDate(chat.lastTs, intl, t)}</span>}
         </span>
         <span className="chat-row-preview">{chat.lastPreview ?? ""}</span>

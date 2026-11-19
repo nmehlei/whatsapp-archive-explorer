@@ -7,7 +7,7 @@ using Microsoft.Data.Sqlite;
 
 namespace ArchiveExplorer.Index;
 
-public sealed record ChatSummary(long Id, string Jid, string? Name, string Kind, bool HasAvatar, long? LastTs, string? LastPreview, int MessageCount);
+public sealed record ChatSummary(long Id, string Jid, string? Name, string Kind, bool HasAvatar, long? LastTs, string? LastPreview, int MessageCount, bool Hidden = false);
 
 public sealed record MessageDto(
     long Id,
@@ -51,10 +51,12 @@ public sealed class Queries(SqliteConnection connection, AddressBook? contacts =
     private readonly AddressBook _contacts = contacts ?? AddressBook.Empty;
 
     /// <summary>Newest first. Names missing in the export come from the address book; the filter matches names and numbers, ignoring accents.</summary>
-    public IReadOnlyList<ChatSummary> ListChats(string? filter)
+    public IReadOnlyList<ChatSummary> ListChats(string? filter, bool includeHidden = false)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT rowid, jid, name, kind, avatar, last_ts, last_preview, message_count FROM chats ORDER BY last_ts IS NULL, last_ts DESC, rowid";
+        cmd.CommandText = "SELECT rowid, jid, name, kind, avatar, last_ts, last_preview, message_count, hidden FROM chats " +
+                          (includeHidden ? "" : "WHERE hidden = 0 ") +
+                          "ORDER BY last_ts IS NULL, last_ts DESC, rowid";
         var folded = string.IsNullOrWhiteSpace(filter) ? null : IndexStore.Fold(filter.Trim());
         var result = new List<ChatSummary>();
         using var r = cmd.ExecuteReader();
@@ -67,9 +69,16 @@ public sealed class Queries(SqliteConnection connection, AddressBook? contacts =
                 continue;
             }
             result.Add(new ChatSummary(r.GetInt64(0), jid, name, r.GetString(3), !r.IsDBNull(4) || _contacts.PhotoFor(jid) is not null,
-                r.IsDBNull(5) ? null : r.GetInt64(5), NullableString(r, 6), r.GetInt32(7)));
+                r.IsDBNull(5) ? null : r.GetInt64(5), NullableString(r, 6), r.GetInt32(7), r.GetInt64(8) == 1));
         }
         return result;
+    }
+
+    public int CountHidden()
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT count(*) FROM chats WHERE hidden = 1";
+        return Convert.ToInt32(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public string? ChatJid(long chatId)

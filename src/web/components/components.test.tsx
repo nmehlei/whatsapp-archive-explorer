@@ -71,8 +71,8 @@ describe("MessageBubble", () => {
 
 describe("ChatList", () => {
   const chats: ChatSummary[] = [
-    { id: 1, jid: "4915550100001@s.whatsapp.net", name: "Jürgen Müller", kind: "private", hasAvatar: false, lastTs: 1700000000, lastPreview: "See you", messageCount: 3 },
-    { id: 2, jid: "000000000000000", name: "Calls", kind: "calls", hasAvatar: false, lastTs: null, lastPreview: null, messageCount: 0 },
+    { id: 1, jid: "4915550100001@s.whatsapp.net", name: "Jürgen Müller", kind: "private", hasAvatar: false, lastTs: 1700000000, lastPreview: "See you", messageCount: 3, hidden: false },
+    { id: 2, jid: "000000000000000", name: "Calls", kind: "calls", hasAvatar: false, lastTs: null, lastPreview: null, messageCount: 0, hidden: true },
   ];
 
   it("renders names, previews and initials, and selects", () => {
@@ -81,6 +81,7 @@ describe("ChatList", () => {
     expect(screen.getByText("Jürgen Müller")).toBeTruthy();
     expect(screen.getByText("See you")).toBeTruthy();
     expect(screen.getByText("JM")).toBeTruthy();
+    expect(screen.getByText("hidden")).toBeTruthy(); // the hidden chat is marked
     fireEvent.click(screen.getByText("Calls"));
     expect(onSelect).toHaveBeenCalledWith(chats[1]);
   });

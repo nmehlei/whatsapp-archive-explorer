@@ -81,6 +81,17 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public void ContactsFile_IsFoundInTheExportFolder_UnlessGiven()
+    {
+        Assert.Null(Program.ResolveContacts(_dir, null));
+        File.WriteAllText(Path.Combine(_dir, "contacts.vcf"), "");
+        var other = Path.Combine(_dir, "other.vcf");
+
+        Assert.Equal(Path.Combine(_dir, "contacts.vcf"), Program.ResolveContacts(_dir, null));
+        Assert.Equal(Path.GetFullPath(other), Program.ResolveContacts(_dir, other));
+    }
+
+    [Fact]
     public void Parse_HelpAndVersion()
     {
         Assert.True(Options.Parse(["--help"]).Options!.ShowHelp);

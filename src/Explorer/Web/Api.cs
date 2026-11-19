@@ -16,9 +16,10 @@ public static class Api
             filesTotal = state.FilesTotal,
             chats = state.Result?.Chats ?? 0,
             messages = state.Result?.Messages ?? 0,
+            hiddenChats = state.IsReady ? WithReader(state, q => q.CountHidden()) : 0,
         }));
 
-        app.MapGet("/api/chats", (string? q) => WithQueries(state, queries => Results.Json(queries.ListChats(q))));
+        app.MapGet("/api/chats", (string? q, bool? hidden) => WithQueries(state, queries => Results.Json(queries.ListChats(q, hidden == true))));
 
         app.MapGet("/api/chats/{id:long}/messages", (long id, long? before, long? after, long? around, long? aroundTs, int? limit) =>
             WithQueries(state, queries =>
@@ -59,8 +60,13 @@ public static class Api
             context.Request.Path.StartsWithSegments("/api") ? Results.NotFound() : ui.Serve(context.Request.Path.Value ?? "/"));
     }
 
-    private static bool ChatExists(Queries queries, long id) =>
-        queries.Messages(id, null, null, null, null, 1).Items.Count > 0 || queries.ListChats(null).Any(c => c.Id == id);
+    private static bool ChatExists(Queries queries, long id) => queries.ChatJid(id) is not null;
+
+    private static T WithReader<T>(IndexState state, Func<Queries, T> action)
+    {
+        using var connection = state.OpenReader();
+        return action(new Queries(connection, state.Contacts));
+    }
 
     private static IResult WithQueries(IndexState state, Func<Queries, IResult> action)
     {

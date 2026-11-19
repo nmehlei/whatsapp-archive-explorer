@@ -47,6 +47,7 @@ public static class Program
                 $"error: no WhatsApp-Chat-Exporter JSON in {archive} — expected json/*.json (export with --per-chat) or result.json");
             return 2;
         }
+        var contactsPath = ResolveContacts(archive, options.Contacts);
         if (options.Contacts is not null && !File.Exists(options.Contacts))
         {
             await error.WriteLineAsync($"error: contacts file not found: {Path.GetFullPath(options.Contacts)}");
@@ -63,7 +64,7 @@ public static class Program
             dbPath,
             options.Port,
             options.Listen,
-            ContactsPath: options.Contacts is null ? null : Path.GetFullPath(options.Contacts),
+            ContactsPath: contactsPath,
             CountryCode: options.CountryCode));
         await app.StartAsync();
 
@@ -75,7 +76,7 @@ public static class Program
         await output.WriteLineAsync($"archive: {archive}");
         await output.WriteLineAsync($"index:   {dbPath ?? "in memory"}");
         var contacts = app.Services.GetRequiredService<IndexState>().Contacts;
-        if (options.Contacts is not null)
+        if (contactsPath is not null)
         {
             await output.WriteLineAsync($"contacts: {contacts.Contacts} names, {contacts.Numbers} numbers, {contacts.Photos} photos");
             if (contacts.NationalNumbersIgnored > 0)
@@ -111,6 +112,17 @@ public static class Program
 
         await app.WaitForShutdownAsync();
         return 0;
+    }
+
+    /// <summary>--contacts if given, else "contacts.vcf" in the export folder (written by backup tools), else none.</summary>
+    public static string? ResolveContacts(string archive, string? option)
+    {
+        if (option is not null)
+        {
+            return Path.GetFullPath(option);
+        }
+        var inArchive = Path.Combine(archive, "contacts.vcf");
+        return File.Exists(inArchive) ? inArchive : null;
     }
 
     private static string Version() =>

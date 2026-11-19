@@ -26,6 +26,9 @@ It reads the output of [WhatsApp-Chat-Exporter](https://github.com/KnugiHK/Whats
 - **Fast** — the first start builds a search index (one to three minutes for ~500,000 messages, depending on
   disk/network); later starts only check the files and re-read chats that changed, usually within seconds.
   Smooth with chats of 50,000+ messages.
+- **Hidden chats** — WhatsApp keeps side entries it never lists (group members, channels, …). If the decrypted
+  `msgstore.db` lies in the export folder, they are hidden like in WhatsApp; a filter switch shows them, and search
+  still covers them.
 - English and German, light and dark mode (follows your system).
 
 <img src="docs/screenshots/search-dark.png" alt="Dark mode" width="49%"> <img src="docs/screenshots/group-chat.png" alt="Group chat" width="49%">
@@ -76,7 +79,7 @@ or [Google Contacts → Export → vCard](https://contacts.google.com) — and p
 ./whatsapp-archive-explorer path/to/export --contacts contacts.vcf --country-code 49
 ```
 
-Names and photos are matched by phone number and used for chats, group senders and reactions. `--country-code`
+A `contacts.vcf` in the export folder is picked up automatically. Names and photos are matched by phone number and used for chats, group senders and reactions. `--country-code`
 is needed for numbers saved without one (`0155…`). The file is only read; nothing is copied or stored.
 
 Options: `--port <n>`, `--no-browser`, `--no-cache`, `--verbose`, `--listen <ip>` (exposes your chats to the

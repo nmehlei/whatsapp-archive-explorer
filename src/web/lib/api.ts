@@ -20,7 +20,8 @@ function query(params: Record<string, string | number | boolean | undefined | nu
 
 export const api = {
   status: (signal?: AbortSignal) => get<Status>("/api/status", signal),
-  chats: (q?: string, signal?: AbortSignal) => get<ChatSummary[]>(`/api/chats${query({ q })}`, signal),
+  chats: (q?: string, hidden = false, signal?: AbortSignal) =>
+    get<ChatSummary[]>(`/api/chats${query({ q, hidden: hidden || undefined })}`, signal),
   messages: (
     chatId: number,
     cursor: { before?: number; after?: number; around?: number; aroundTs?: number },

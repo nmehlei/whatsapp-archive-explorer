@@ -3,7 +3,7 @@ namespace ArchiveExplorer.Index;
 public static class IndexSchema
 {
     /// <summary>Bump whenever tables, tokenizer or import rules change: older indexes are rebuilt.</summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     public const string Create = """
         CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -18,6 +18,7 @@ public static class IndexSchema
             last_ts INTEGER,
             last_preview TEXT,
             message_count INTEGER NOT NULL,
+            hidden INTEGER NOT NULL DEFAULT 0,
             file TEXT NOT NULL);
         CREATE INDEX chats_file ON chats(file);
         CREATE TABLE messages (

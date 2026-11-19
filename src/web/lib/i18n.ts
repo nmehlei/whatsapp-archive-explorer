@@ -48,6 +48,8 @@ const en = {
   loadMore: "Load more",
   backToList: "Back",
   replyUnavailable: "Original message not in the archive",
+  showHidden: "Show hidden chats ({count})",
+  hiddenBadge: "hidden",
 };
 
 export type MessageKey = keyof typeof en;
@@ -102,6 +104,8 @@ const de: Record<MessageKey, string> = {
   loadMore: "Mehr laden",
   backToList: "Zurück",
   replyUnavailable: "Originalnachricht nicht im Archiv",
+  showHidden: "Ausgeblendete Chats zeigen ({count})",
+  hiddenBadge: "ausgeblendet",
 };
 
 const catalogs = { en, de } as const;

@@ -9,6 +9,9 @@ import { ChatList, ChatRow } from "./ChatList";
 
 interface Props {
   chats: ChatSummary[];
+  hiddenCount: number;
+  showHidden: boolean;
+  onShowHidden: (show: boolean) => void;
   selectedId: number | null;
   onSelectChat: (chat: ChatSummary) => void;
   onOpenHit: (hit: SearchHit, query: string) => void;
@@ -21,7 +24,7 @@ function toTs(value: string, endOfDay: boolean): number | undefined {
 }
 
 /** WhatsApp-style search: the box filters the chat list and finds messages across all chats. */
-export function Sidebar({ chats, selectedId, onSelectChat, onOpenHit }: Props) {
+export function Sidebar({ chats, hiddenCount, showHidden, onShowHidden, selectedId, onSelectChat, onOpenHit }: Props) {
   const { t, intl } = useUi();
   const [q, setQ] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -46,7 +49,7 @@ export function Sidebar({ chats, selectedId, onSelectChat, onOpenHit }: Props) {
     if (!query) return;
     const ctl = new AbortController();
     const timer = setTimeout(() => {
-      api.chats(query, ctl.signal).then(setChatHits, () => undefined);
+      api.chats(query, showHidden, ctl.signal).then(setChatHits, () => undefined);
       api.search(query, JSON.parse(filterKey) as SearchFilters, 0, ctl.signal).then((r) => {
         setHits(r.hits);
         setTotal(r.total);
@@ -56,7 +59,7 @@ export function Sidebar({ chats, selectedId, onSelectChat, onOpenHit }: Props) {
       clearTimeout(timer);
       ctl.abort();
     };
-  }, [query, filterKey]);
+  }, [query, filterKey, showHidden]);
 
   const more = () =>
     api.search(query, filters, hits.length).then((r) => setHits((prev) => [...prev, ...r.hits]), () => undefined);
@@ -88,6 +91,12 @@ export function Sidebar({ chats, selectedId, onSelectChat, onOpenHit }: Props) {
           <label>
             {t("dateTo")} <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
+          {hiddenCount > 0 && (
+            <label>
+              <input type="checkbox" checked={showHidden} onChange={(e) => onShowHidden(e.target.checked)} />{" "}
+              {t("showHidden", { count: hiddenCount })}
+            </label>
+          )}
         </div>
       )}
 

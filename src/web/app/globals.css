@@ -165,3 +165,4 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; }
   .bubble { max-width: 85%; }
   .bubble-row { padding: 2px 3%; }
 }
+.hidden-badge { margin-left: 8px; font-size: 11px; color: var(--muted); vertical-align: middle; }

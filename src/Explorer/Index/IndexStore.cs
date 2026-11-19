@@ -119,6 +119,8 @@ public sealed class IndexStore : IDisposable
             }
         }
 
+        ApplyHiddenFlags();
+
         return new RefreshResult(
             files.Count,
             indexed,
@@ -184,6 +186,72 @@ public sealed class IndexStore : IDisposable
         Bind(upsert, ("$path", file.RelativePath), ("$size", file.Size), ("$mtime", mtime), ("$conflicts", conflicts ? 1 : 0));
         upsert.ExecuteNonQuery();
         tx.Commit();
+    }
+
+    /// <summary>
+    /// WhatsApp marks some chats hidden (group-member side entries, channels, …) and never lists them. The exporter's
+    /// JSON lacks that flag, so it is read from the decrypted msgstore.db next to the export, if present (read-only).
+    /// A chat is hidden only if every msgstore chat that maps onto it (LID chats map to phone numbers) is hidden.
+    /// </summary>
+    private void ApplyHiddenFlags()
+    {
+        var hidden = new HashSet<string>(StringComparer.Ordinal);
+        var path = Path.Combine(_archiveRoot, "msgstore.db");
+        if (File.Exists(path))
+        {
+            try
+            {
+                using var msgstore = new SqliteConnection(new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                    Mode = SqliteOpenMode.ReadOnly,
+                    Pooling = false,
+                }.ToString());
+                msgstore.Open();
+                var hasMap = Exists(msgstore, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='jid_map'");
+                var hasHidden = Exists(msgstore, "SELECT 1 FROM pragma_table_info('chat') WHERE name='hidden'");
+                if (hasHidden)
+                {
+                    var key = hasMap ? "COALESCE(mapped.raw_string, jid.raw_string)" : "jid.raw_string";
+                    var join = hasMap ? "LEFT JOIN jid_map ON jid_map.lid_row_id = chat.jid_row_id LEFT JOIN jid mapped ON mapped._id = jid_map.jid_row_id" : "";
+                    using var cmd = msgstore.CreateCommand();
+                    cmd.CommandText = $"SELECT {key}, max(chat.hidden = 0) FROM chat JOIN jid ON jid._id = chat.jid_row_id {join} GROUP BY 1";
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read())
+                    {
+                        if (!r.IsDBNull(0) && r.GetInt64(1) == 0)
+                        {
+                            hidden.Add(r.GetString(0));
+                        }
+                    }
+                }
+            }
+            catch (SqliteException)
+            {
+                hidden.Clear(); // not a readable msgstore: show everything rather than hide by mistake
+            }
+        }
+
+        using var tx = Connection.BeginTransaction();
+        using (var reset = Command(tx, "UPDATE chats SET hidden = 0"))
+        {
+            reset.ExecuteNonQuery();
+        }
+        using var set = Command(tx, "UPDATE chats SET hidden = 1 WHERE jid = $jid");
+        var parameter = set.Parameters.Add("$jid", SqliteType.Text);
+        foreach (var jid in hidden)
+        {
+            parameter.Value = jid;
+            set.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+
+    private static bool Exists(SqliteConnection c, string sql)
+    {
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = sql;
+        return cmd.ExecuteScalar() is not null;
     }
 
     private bool HasConflicts(string path)
