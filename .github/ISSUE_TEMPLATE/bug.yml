@@ -1,0 +1,32 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never attach real chats, screenshots of chats, logs or databases.** Reproduce with the demo archive
+        (`dotnet run --project src/DemoArchive -- ./demo-archive`) or describe the data's shape only.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `whatsapp-archive-explorer --version`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+    validations:
+      required: true
+  - type: input
+    id: exporter
+    attributes:
+      label: WhatsApp-Chat-Exporter version and options used
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true

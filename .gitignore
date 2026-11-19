@@ -1,0 +1,30 @@
+# build output
+bin/
+obj/
+publish/
+artifacts/
+*.user
+.vs/
+.idea/
+
+# web
+src/web/node_modules/
+src/web/.next/
+src/web/out/
+src/web/next-env.d.ts
+node_modules/
+test-results/
+playwright-report/
+
+# NEVER commit real chats: keep private exports outside the repo.
+# These patterns guard the common mistakes.
+*.db
+*.sqlite
+*.crypt12
+*.crypt14
+*.crypt15
+archive*/
+samples-private/
+demo-archive/
+
+# local agent workspace
