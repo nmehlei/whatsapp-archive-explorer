@@ -1,19 +1,89 @@
 # whatsapp-archive-explorer
 
-Browse and search your exported WhatsApp history like in WhatsApp itself — chat list, chats, media and
-full-text search across every chat — from **one self-contained executable** that runs entirely on your own
+Browse and search your exported WhatsApp history like in WhatsApp itself — chat list, chats, media, and
+full-text search across **every** chat — from **one self-contained executable** that runs entirely on your own
 computer.
 
-It reads the output of [WhatsApp-Chat-Exporter](https://github.com/KnugiHK/WhatsApp-Chat-Exporter)
-(`--per-chat` JSON plus the media folder) **read-only**.
+It reads the output of [WhatsApp-Chat-Exporter](https://github.com/KnugiHK/WhatsApp-Chat-Exporter) **read-only**.
 
-> **Not affiliated with WhatsApp or Meta.** "WhatsApp" is a trademark of WhatsApp LLC. This project uses
-> no WhatsApp logo, fonts or design assets.
+![Search across all chats, jumping to the hit](docs/screenshots/search-light.png)
 
-## Privacy
+> **Not affiliated with WhatsApp or Meta.** "WhatsApp" is a trademark of WhatsApp LLC. This project uses no
+> WhatsApp logo, fonts or design assets. All screenshots show generated demo data.
 
-- Runs only on `127.0.0.1`; nothing is sent anywhere — no telemetry, no update checks, no external fonts.
-- Never writes into your archive. The search index lives in your user cache folder.
-- Never prints chat names or message text to the terminal.
+## Features
 
-*Work in progress — see `docs/` for the design.*
+- **Chat list** like WhatsApp — newest first, avatars or initials, last message, live filter (accents ignored:
+  `muller` finds `Müller`).
+- **Chats** — bubbles, group sender names, day dividers, replies (click to jump to the original), reactions,
+  photos, videos, voice messages, documents, contact cards, calls, system messages.
+- **Search on every level** — across all chats (grouped results with highlighted snippets, filters for sender,
+  date range and media; click a hit to open the chat right there), inside a chat (next/previous), jump to a date.
+- **Media** — full-screen viewer and a per-chat gallery.
+- **Archive-aware** — if your archive keeps edited or "deleted for everyone" messages (see
+  [docs/format.md](docs/format.md)), the original is shown with a marker and later versions on demand.
+- **Fast** — the first start builds a search index (about a minute for ~500,000 messages); later starts are
+  instant and only re-read chats that changed. Smooth with chats of 50,000+ messages.
+- English and German, light and dark mode (follows your system).
+
+<img src="docs/screenshots/search-dark.png" alt="Dark mode" width="49%"> <img src="docs/screenshots/group-chat.png" alt="Group chat" width="49%">
+
+## Privacy and security
+
+- Listens only on `127.0.0.1` (this computer). Nothing is sent anywhere: no telemetry, no update checks, no
+  fonts or scripts from the internet.
+- **Never writes into your export folder.** The search index lives in your user cache folder
+  (`~/Library/Caches/whatsapp-archive-explorer` on macOS, `~/.cache/…` on Linux, `%LOCALAPPDATA%\…` on Windows),
+  readable only by you. `--no-cache` keeps it in memory instead.
+- Other websites open in your browser cannot read your chats: the server answers only requests addressed to
+  `localhost`/`127.0.0.1` from its own pages, and serves everything with a strict content security policy.
+- Message content is sanitised before display; files from the archive that could run code (HTML, SVG, …) are
+  only offered as downloads.
+- The terminal shows counts and paths only — never chat names or message text.
+
+## Getting started
+
+1. **Export** your chats with WhatsApp-Chat-Exporter, as per-chat JSON plus the media folder, e.g.
+
+   ```sh
+   wtsexporter -a -k <key> -b msgstore.db.crypt15 -m WhatsApp -o export -j json --per-chat
+   ```
+
+   (Any layout with `json/*.json` or `result.json` next to the media folder works.)
+
+2. **Download** the file for your system from the [releases](../../releases), unpack it, and run:
+
+   ```sh
+   ./whatsapp-archive-explorer path/to/export
+   ```
+
+   Your browser opens at `http://127.0.0.1:<port>/`. Press Ctrl+C in the terminal to stop.
+
+   - **macOS:** the program is not notarised. Starting it from the terminal works; in Finder use right-click →
+     *Open* the first time.
+   - **Windows:** SmartScreen may show "Windows protected your PC" for a fresh download → *More info* →
+     *Run anyway*.
+
+Options: `--port <n>`, `--no-browser`, `--no-cache`, `--verbose`, `--listen <ip>` (exposes your chats to the
+network — only on networks you trust), `--version`, `--help`.
+
+Each release ships a `SHA256SUMS` file, signed keylessly with [Sigstore](https://www.sigstore.dev/), and build
+provenance attestations.
+
+## Building from source
+
+Requirements: .NET 10 SDK, Node.js 22+.
+
+```sh
+dotnet run --project src/DemoArchive -- ./demo-archive        # synthetic export to play with
+dotnet run --project src/Explorer -- ./demo-archive           # builds the UI and starts the explorer
+dotnet publish src/Explorer -c Release -r osx-arm64 -o out    # single executable (osx-x64, linux-x64, win-x64, …)
+```
+
+Tests: `dotnet test` (backend), `npm test` / `npm run lint` in `src/web` (UI), `npm run e2e` in `src/web`
+(end-to-end against a demo archive). See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[docs/architecture.md](docs/architecture.md).
+
+## License
+
+[MIT](LICENSE)
