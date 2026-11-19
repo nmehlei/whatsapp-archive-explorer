@@ -35,15 +35,9 @@ public sealed class MediaFiles(string archiveRoot)
         {
             return null;
         }
-        string decoded;
-        try
-        {
-            decoded = Uri.UnescapeDataString(relativePath).Replace('\\', '/');
-        }
-        catch (UriFormatException)
-        {
-            return null;
-        }
+        // relativePath is already decoded (ASP.NET leaves only %2F encoded); never decode twice, or a file named
+        // "a%20b.png" would be looked up as "a b.png"
+        var decoded = relativePath.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase).Replace('\\', '/');
         if (decoded.StartsWith('/') || decoded.Contains(':', StringComparison.Ordinal) || decoded.Contains('\0', StringComparison.Ordinal))
         {
             return null;

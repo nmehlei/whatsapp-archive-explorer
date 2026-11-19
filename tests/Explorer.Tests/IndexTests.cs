@@ -68,6 +68,38 @@ public sealed class IndexTests : IDisposable
     }
 
     [Fact]
+    public void Index_RenamedFileKeepsItsChats()
+    {
+        DemoArchiveWriter.Write(Archive, new DemoOptions(Chats: 4, MessagesPerChat: 10));
+        using var store = IndexStore.Open(Archive, Db);
+        var before = store.Refresh(null);
+        var file = Directory.GetFiles(Path.Combine(Archive, "json")).Order(StringComparer.Ordinal).Last();
+
+        File.Move(file, Path.Combine(Archive, "json", "zz-renamed-contact.json"));
+        var result = store.Refresh(null);
+
+        Assert.Equal(before.Chats, result.Chats);
+        Assert.Equal(before.Messages, result.Messages);
+    }
+
+    [Fact]
+    public void Index_DuplicateChatTakenOverWhenWinnerDisappears()
+    {
+        Directory.CreateDirectory(Path.Combine(Archive, "json"));
+        const string chat = """{ "4915550100001@s.whatsapp.net": { "name": "A", "messages": { "1": { "from_me": true, "timestamp": 1700000000, "data": "{0}" } } } }""";
+        File.WriteAllText(Path.Combine(Archive, "json", "a.json"), chat.Replace("{0}", "from a", StringComparison.Ordinal));
+        File.WriteAllText(Path.Combine(Archive, "json", "b.json"), chat.Replace("{0}", "from b", StringComparison.Ordinal));
+        using var store = IndexStore.Open(Archive, Db);
+        Assert.Equal(1, store.Refresh(null).Chats);
+
+        File.Delete(Path.Combine(Archive, "json", "a.json"));
+        var result = store.Refresh(null);
+
+        Assert.Equal(1, result.Chats);
+        Assert.Equal(1, Scalar(store, "SELECT count(*) FROM messages_fts WHERE messages_fts MATCH '\"from b\"'"));
+    }
+
+    [Fact]
     public void Index_SchemaVersionMismatchRebuilds()
     {
         DemoArchiveWriter.Write(Archive, new DemoOptions(Chats: 3, MessagesPerChat: 10));

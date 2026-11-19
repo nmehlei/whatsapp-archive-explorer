@@ -3,11 +3,11 @@ namespace ArchiveExplorer.Index;
 public static class IndexSchema
 {
     /// <summary>Bump whenever tables, tokenizer or import rules change: older indexes are rebuilt.</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     public const string Create = """
         CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE files (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL);
+        CREATE TABLE files (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, has_conflicts INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE chats (
             rowid INTEGER PRIMARY KEY,
             jid TEXT NOT NULL UNIQUE,

@@ -22,7 +22,7 @@ public sealed record Options(
         Options:
           --archive <dir>   The export folder (contains json/ or result.json). May also be given first.
           --port <n>        Port on 127.0.0.1 (default: a free port).
-          --listen <ip>     Also listen on this address, e.g. 0.0.0.0 — exposes your chats on the network!
+          --listen <ip>     Also listen on this address (0.0.0.0 = all) — anyone on the network can then read your chats!
           --no-browser      Do not open the browser.
           --no-cache        Keep the search index in memory only (rebuilt on every start).
           --verbose         More progress output (counts only).

@@ -71,6 +71,65 @@ public sealed class ImporterTests : IDisposable
     }
 
     [Fact]
+    public void Importer_NullAndWrongTypedValuesAreTolerated()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "json"));
+        File.WriteAllText(Path.Combine(_root, "json", "a.json"), """
+            { "4915550100001@s.whatsapp.net": { "name": 5, "their_avatar": false, "messages": {
+                "1": { "from_me": "yes", "timestamp": 1500000000, "message_type": null, "data": 7, "reactions": [],
+                       "revisions": {}, "media": 1, "key_id": null, "sender": [], "edited": null },
+                "2": { "from_me": true, "timestamp": 1500000001, "message_type": "7", "data": "x", "reactions": { "A": 1 } } } } }
+            """);
+        var stats = new ImportStats();
+
+        var chat = ReadAll(stats).Single();
+
+        Assert.Equal(2, chat.Messages.Count);
+        Assert.Null(chat.Name);
+        Assert.Null(chat.Messages[0].MessageType);
+        Assert.Null(chat.Messages[1].Reactions);
+        Assert.Equal(0, stats.SkippedMessages);
+    }
+
+    [Fact]
+    public void Importer_KeepsZeroAndClampsImplausibleTimestamps()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "json"));
+        File.WriteAllText(Path.Combine(_root, "json", "a.json"), """
+            { "4915550100001@s.whatsapp.net": { "name": "A", "messages": {
+                "1": { "from_me": false, "timestamp": 0, "data": "epoch" },
+                "2": { "from_me": false, "timestamp": 1500000000123456, "data": "microseconds" },
+                "3": { "from_me": false, "timestamp": "Infinity", "data": "nonsense" } } } }
+            """);
+        var stats = new ImportStats();
+
+        var messages = ReadAll(stats).Single().Messages;
+
+        Assert.Equal(3, messages.Count); // never lose a message over its timestamp
+        Assert.Equal(0, stats.SkippedMessages);
+        Assert.All(messages, m => Assert.InRange(m.Timestamp, 0, 32503680000)); // <= year 3000
+        Assert.Contains(messages, m => m.Timestamp == 1500000000);
+    }
+
+    [Theory]
+    [InlineData("line one<br>line two", "line one\nline two")]
+    [InlineData("if a <b and c", "if a <b and c")]
+    [InlineData("<i>not markup</i> &amp; friends", "<i>not markup</i> &amp; friends")]
+    public void Importer_PlainTextStaysText(string data, string expected)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "json"));
+        File.WriteAllText(Path.Combine(_root, "json", "a.json"), System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["4915550100001@s.whatsapp.net"] = new { name = "A", messages = new Dictionary<string, object> { ["1"] = new { from_me = false, timestamp = 1500000000, data } } },
+        }));
+
+        var message = ReadAll(new ImportStats()).Single().Messages.Single();
+
+        Assert.Null(message.RawHtml);
+        Assert.Equal(expected.Replace("\\n", "\n", StringComparison.Ordinal), message.Text);
+    }
+
+    [Fact]
     public void Importer_NormalisesMillisecondTimestamps()
     {
         Directory.CreateDirectory(Path.Combine(_root, "json"));

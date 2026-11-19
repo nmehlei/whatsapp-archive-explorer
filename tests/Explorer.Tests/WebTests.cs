@@ -72,6 +72,53 @@ public sealed class WebTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RemoteGuard_RejectsNonLoopbackClientsWithoutListen()
+    {
+        var context = await _app.GetTestServer().SendAsync(c =>
+        {
+            c.Request.Method = "GET";
+            c.Request.Path = "/api/status";
+            c.Request.Host = new Microsoft.AspNetCore.Http.HostString("127.0.0.1");
+            c.Connection.RemoteIpAddress = IPAddress.Parse("192.168.1.50");
+        });
+
+        Assert.Equal(403, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Host_IgnoresConfigurationThatCouldOpenPorts()
+    {
+        Environment.SetEnvironmentVariable("Kestrel__Endpoints__Lan__Url", "http://0.0.0.0:59123");
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
+        try
+        {
+            await using var app = ExplorerHost.Create(new HostSettings(Archive, DbPath: null), b => b.WebHost.UseTestServer());
+
+            Assert.Null(app.Configuration["Kestrel:Endpoints:Lan:Url"]);
+            Assert.Equal("Production", app.Environment.EnvironmentName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Kestrel__Endpoints__Lan__Url", null);
+            Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", null);
+        }
+    }
+
+    [Fact]
+    public void Listen_AllowsLoopbackAndOwnAddresses()
+    {
+        var any = ExplorerHost.AllowedHostNames("0.0.0.0");
+        var specific = ExplorerHost.AllowedHostNames("10.1.2.3");
+        var none = ExplorerHost.AllowedHostNames(null);
+
+        Assert.Contains("127.0.0.1", any);
+        Assert.Contains(Environment.MachineName.ToLowerInvariant(), any);
+        Assert.Contains("10.1.2.3", specific);
+        Assert.Contains("localhost", specific);
+        Assert.Equal(["127.0.0.1", "[::1]", "localhost"], none.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Api_RejectsCrossSiteFetch()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/chats");
@@ -133,6 +180,17 @@ public sealed class WebTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.PartialContent, response.StatusCode);
         Assert.Equal("image/png", response.Content.Headers.ContentType!.MediaType);
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task Media_FileNamesWithPercentAreFound()
+    {
+        var path = Path.Combine(Archive, "WhatsApp", "Media", "Extra", "a%20b.png");
+        File.Copy(Directory.GetFiles(Path.Combine(Archive, "WhatsApp", "Media", "WhatsApp Images"))[0], path);
+
+        using var response = await _client.GetAsync(HtmlSafe.MediaUrl("WhatsApp/Media/Extra/a%20b.png"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Theory]

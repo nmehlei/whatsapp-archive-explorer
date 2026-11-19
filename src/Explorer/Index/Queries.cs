@@ -254,25 +254,50 @@ public sealed class Queries(SqliteConnection connection)
         return (hits, total);
     }
 
-    /// <summary>User text → a safe FTS5 query: every term quoted (no operators, no columns), last term as prefix.</summary>
+    /// <summary>
+    /// User text → a safe FTS5 query. Every whitespace-separated term becomes a quoted phrase of its letter/digit runs
+    /// ("3.5" → "3 5", an email or URL → its words in order), exactly as the unicode61 tokenizer split the indexed text.
+    /// No operators or column filters can get through; the last term is a prefix. Emoji/symbols are not tokens and are
+    /// dropped (not searchable).
+    /// </summary>
     internal static string? FtsQuery(string? q)
     {
         if (string.IsNullOrWhiteSpace(q))
         {
             return null;
         }
-        var terms = q.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Select(t => new string(t.Where(ch => char.IsLetterOrDigit(ch) || char.IsSurrogate(ch) || ch is '\'' or '-' || char.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.OtherSymbol).ToArray()))
-            .Select(t => t.Trim('-'))
-            .Where(t => t.Length > 0)
-            .ToList();
-        if (terms.Count == 0)
+        var phrases = new List<string>();
+        foreach (var term in q.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var words = new List<string>();
+            var current = new StringBuilder();
+            foreach (var rune in term.EnumerateRunes())
+            {
+                if (Rune.IsLetterOrDigit(rune) || Rune.GetUnicodeCategory(rune) is System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    current.Append(rune.ToString());
+                }
+                else if (current.Length > 0)
+                {
+                    words.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+            if (current.Length > 0)
+            {
+                words.Add(current.ToString());
+            }
+            if (words.Count > 0)
+            {
+                phrases.Add("\"" + string.Join(' ', words) + "\"");
+            }
+        }
+        if (phrases.Count == 0)
         {
             return null;
         }
-        var quoted = terms.Select(t => "\"" + t.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"").ToList();
-        quoted[^1] += "*";
-        return string.Join(' ', quoted);
+        phrases[^1] += "*";
+        return string.Join(' ', phrases);
     }
 
     private (List<MessageDto> Items, bool More) Fetch(long chatId, string condition, (long Ts, long Id) key, bool descending, int limit)

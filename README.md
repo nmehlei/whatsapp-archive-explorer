@@ -19,18 +19,20 @@ It reads the output of [WhatsApp-Chat-Exporter](https://github.com/KnugiHK/Whats
   photos, videos, voice messages, documents, contact cards, calls, system messages.
 - **Search on every level** — across all chats (grouped results with highlighted snippets, filters for sender,
   date range and media; click a hit to open the chat right there), inside a chat (next/previous), jump to a date.
+  Words, numbers like `3.5`, email addresses and links are found; emoji are not searchable.
 - **Media** — full-screen viewer and a per-chat gallery.
 - **Archive-aware** — if your archive keeps edited or "deleted for everyone" messages (see
   [docs/format.md](docs/format.md)), the original is shown with a marker and later versions on demand.
-- **Fast** — the first start builds a search index (about a minute for ~500,000 messages); later starts are
-  instant and only re-read chats that changed. Smooth with chats of 50,000+ messages.
+- **Fast** — the first start builds a search index (one to three minutes for ~500,000 messages, depending on
+  disk/network); later starts only check the files and re-read chats that changed, usually within seconds.
+  Smooth with chats of 50,000+ messages.
 - English and German, light and dark mode (follows your system).
 
 <img src="docs/screenshots/search-dark.png" alt="Dark mode" width="49%"> <img src="docs/screenshots/group-chat.png" alt="Group chat" width="49%">
 
 ## Privacy and security
 
-- Listens only on `127.0.0.1` (this computer). Nothing is sent anywhere: no telemetry, no update checks, no
+- Accepts connections from this computer only (`127.0.0.1`), whatever configuration or environment variables say. Nothing is sent anywhere: no telemetry, no update checks, no
   fonts or scripts from the internet.
 - **Never writes into your export folder.** The search index lives in your user cache folder
   (`~/Library/Caches/whatsapp-archive-explorer` on macOS, `~/.cache/…` on Linux, `%LOCALAPPDATA%\…` on Windows),

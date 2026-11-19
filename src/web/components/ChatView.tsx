@@ -151,8 +151,9 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
               type="date"
               aria-label={t("jumpToDate")}
               onChange={(e) => {
-                const value = e.target.valueAsDate;
-                if (value) void load({ aroundTs: Math.floor(value.getTime() / 1000) });
+                // the picker's value is a local calendar day; valueAsDate would be UTC midnight
+                const [y, m, d] = e.target.value.split("-").map(Number);
+                if (y && m && d) void load({ aroundTs: Math.floor(new Date(y, m - 1, d).getTime() / 1000) });
               }}
             />
           </label>

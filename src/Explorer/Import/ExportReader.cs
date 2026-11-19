@@ -47,7 +47,7 @@ public static partial class ExportReader
             using var stream = File.OpenRead(Path.Combine(root, file.RelativePath));
             doc = JsonDocument.Parse(stream, new JsonDocumentOptions { AllowTrailingCommas = true });
         }
-        catch (Exception e) when (e is JsonException or IOException)
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
         {
             stats.BrokenFiles++;
             yield break;
@@ -114,17 +114,20 @@ public static partial class ExportReader
         {
             mediaPath = string.IsNullOrWhiteSpace(data) ? null : data;
         }
-        else if (data is not null && LooksLikeHtml().IsMatch(data))
+        else if (data is not null && IsVCardHtml(data, mime))
         {
+            // the only HTML the exporter writes into "data": its vCard link list
             html = data;
             text = WebUtility.HtmlDecode(Tags().Replace(data.Replace("<br>", " ", StringComparison.OrdinalIgnoreCase), "")).Trim();
         }
         else
         {
-            text = data;
+            // user text is never treated as markup; the exporter writes line breaks as <br>
+            text = data?.Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase);
         }
 
-        int? type = m.TryGetProperty("message_type", out var t) && t.TryGetInt32(out var tv) ? tv : null;
+        // TryGetInt32 throws (not false) on a non-number, and real exports contain "message_type": null
+        int? type = m.TryGetProperty("message_type", out var t) && t.ValueKind == JsonValueKind.Number && t.TryGetInt32(out var tv) ? tv : null;
         var isSystem = type == SystemMessageType
             || (Bool(m, "meta") && !isMedia && mime is null && html is null && kind != "calls");
 
@@ -182,7 +185,13 @@ public static partial class ExportReader
         _ => "other",
     };
 
-    /// <summary>Unix seconds; exporter versions that stored milliseconds are normalised.</summary>
+    /// <summary>Latest plausible timestamp (year 3000); anything beyond is clamped so the UI never gets an invalid date.</summary>
+    internal const long MaxTimestamp = 32_503_680_000;
+
+    /// <summary>
+    /// Unix seconds. Milliseconds and microseconds are normalised, and odd values (0, negative, non-finite) are kept
+    /// as 0 or clamped instead of dropping the message. Only a missing or non-numeric timestamp skips a message.
+    /// </summary>
     private static bool TryTimestamp(JsonElement m, out long ts)
     {
         ts = 0;
@@ -193,18 +202,26 @@ public static partial class ExportReader
         var parsed = v.ValueKind switch
         {
             JsonValueKind.Number when v.TryGetDouble(out var number) => number,
-            JsonValueKind.String when double.TryParse(v.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var text) => text,
+            JsonValueKind.String when double.TryParse(v.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var text) => text,
             _ => (double?)null,
         };
-        if (parsed is not { } raw || raw <= 0)
+        if (parsed is not { } raw)
         {
             return false;
         }
-        if (raw > 9_999_999_999)
+        if (!double.IsFinite(raw) || raw < 0)
+        {
+            raw = double.IsPositiveInfinity(raw) ? MaxTimestamp : 0;
+        }
+        else if (raw > 1e14)
+        {
+            raw /= 1_000_000;
+        }
+        else if (raw > 9_999_999_999)
         {
             raw /= 1000;
         }
-        ts = (long)raw;
+        ts = (long)Math.Min(raw, MaxTimestamp);
         return true;
     }
 
@@ -214,8 +231,9 @@ public static partial class ExportReader
     private static bool Bool(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
 
-    [GeneratedRegex(@"<(a|br|b|i|em|strong)[\s>/]", RegexOptions.IgnoreCase)]
-    private static partial Regex LooksLikeHtml();
+    private static bool IsVCardHtml(string data, string? mime) =>
+        data.Contains("<a href=", StringComparison.OrdinalIgnoreCase)
+        && (mime == "text/x-vcard" || data.StartsWith("This media include the following vCard file(s):", StringComparison.Ordinal));
 
     [GeneratedRegex("<[^>]*>")]
     private static partial Regex Tags();

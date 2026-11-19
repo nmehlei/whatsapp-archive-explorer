@@ -57,12 +57,12 @@ public static class Program
             archive,
             dbPath,
             options.Port,
-            options.Listen,
-            options.Listen is null ? null : [options.Listen, Environment.MachineName, Environment.MachineName + ".local"]));
+            options.Listen));
         await app.StartAsync();
 
+        // every listener shares one port (0.0.0.0 shows up as "http://0.0.0.0:<port>", which includes loopback)
         var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
-        var port = new Uri(address).Port;
+        var port = new Uri(address.Replace("://+", "://0.0.0.0", StringComparison.Ordinal)).Port;
         var url = $"http://127.0.0.1:{port}/";
         await output.WriteLineAsync($"whatsapp-archive-explorer {Version()}");
         await output.WriteLineAsync($"archive: {archive}");
@@ -90,7 +90,7 @@ public static class Program
         }
         else
         {
-            await error.WriteLineAsync("error: indexing failed — the browser shows the status.");
+            await error.WriteLineAsync($"error: indexing failed ({state.ErrorSummary}) — please report this (without chat content).");
         }
 
         await app.WaitForShutdownAsync();

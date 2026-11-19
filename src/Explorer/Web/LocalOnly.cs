@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Http;
 
 namespace ArchiveExplorer.Web;
@@ -7,12 +8,19 @@ namespace ArchiveExplorer.Web;
 /// answers. So: only requests addressed to a loopback name (plus --listen names) with our own port, and API/media
 /// calls only from our own pages.
 /// </summary>
-public sealed class LocalOnly(RequestDelegate next, IReadOnlySet<string> allowedHosts)
+public sealed class LocalOnly(RequestDelegate next, IReadOnlySet<string> allowedHosts, bool allowRemoteClients)
 {
     public static readonly string[] LoopbackNames = ["localhost", "127.0.0.1", "[::1]"];
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Without --listen only this computer may connect, whatever the configuration or Host header says.
+        if (!allowRemoteClients && context.Connection.RemoteIpAddress is { } remote && !IPAddress.IsLoopback(remote))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
         if (!IsAllowedHost(context.Request.Host, context.Connection.LocalPort))
         {
             context.Response.StatusCode = StatusCodes.Status421MisdirectedRequest;

@@ -156,6 +156,37 @@ public sealed class QueryTests : IDisposable
     }
 
     [Theory]
+    [InlineData("3.5", 1)]
+    [InlineData("anna.becker@example.org", 1)]
+    [InlineData("https://example.org/path?a=1", 1)]
+    [InlineData("example.org", 2)]
+    [InlineData("e.g.", 1)]
+    [InlineData("❤️", 0)] // emoji are not searchable (documented)
+    public void Search_TermsWithPunctuationMatchAsPhrases(string q, int expected)
+    {
+        var dir = Directory.CreateTempSubdirectory("wae-punct-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "json"));
+            File.WriteAllText(Path.Combine(dir, "json", "a.json"), """
+                { "4915550100001@s.whatsapp.net": { "name": "A", "messages": {
+                    "1": { "from_me": false, "timestamp": 1500000001, "data": "Version 3.5 is out, e.g. today ❤️" },
+                    "2": { "from_me": false, "timestamp": 1500000002, "data": "Mail anna.becker@example.org please" },
+                    "3": { "from_me": false, "timestamp": 1500000003, "data": "See https://example.org/path?a=1 for details" } } } }
+                """);
+            using var store = IndexStore.Open(dir, null);
+            store.Refresh(null);
+
+            Assert.Equal(expected, new Queries(store.Connection).Search(q, null, null, null, null, null, 0, 10).Total);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("\"")]
     [InlineData("*")]
     [InlineData("NEAR(")]

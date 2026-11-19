@@ -84,31 +84,45 @@ public sealed class IndexStore : IDisposable
             }
         }
 
-        var indexed = 0;
-        var done = 0;
-        var stats = new ImportStats();
-        foreach (var file in files)
-        {
-            var mtime = file.MtimeUtc.Ticks;
-            if (!known.Remove(file.RelativePath, out var fingerprint) || fingerprint != (file.Size, mtime))
-            {
-                IndexFile(file, mtime, stats);
-                indexed++;
-            }
-            progress?.Report(new IndexProgress(++done, files.Count));
-        }
-
-        foreach (var gone in known.Keys)
+        // Removed files first: a renamed file (same chats under a new name) must not lose against its old self.
+        var current = files.Select(f => f.RelativePath).ToHashSet(StringComparer.Ordinal);
+        var removed = known.Keys.Where(path => !current.Contains(path)).ToList();
+        foreach (var gone in removed)
         {
             using var tx = Connection.BeginTransaction();
             DeleteFile(gone, tx);
             tx.Commit();
         }
 
+        var indexed = 0;
+        var done = 0;
+        var stats = new ImportStats();
+        var touched = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            var mtime = file.MtimeUtc.Ticks;
+            if (!known.TryGetValue(file.RelativePath, out var fingerprint) || fingerprint != (file.Size, mtime))
+            {
+                IndexFile(file, mtime, stats);
+                touched.Add(file.RelativePath);
+                indexed++;
+            }
+            progress?.Report(new IndexProgress(++done, files.Count));
+        }
+
+        // A file whose chats lost a duplicate-id race gets another chance once anything was removed or replaced.
+        if (removed.Count > 0 || touched.Count > 0)
+        {
+            foreach (var file in files.Where(f => !touched.Contains(f.RelativePath) && HasConflicts(f.RelativePath)))
+            {
+                IndexFile(file, file.MtimeUtc.Ticks, stats);
+            }
+        }
+
         return new RefreshResult(
             files.Count,
             indexed,
-            known.Count,
+            removed.Count,
             (int)Count("SELECT count(*) FROM chats"),
             (int)Count("SELECT count(*) FROM messages"));
     }
@@ -132,6 +146,7 @@ public sealed class IndexStore : IDisposable
             """);
         using var insertFts = Command(tx, "INSERT INTO messages_fts (rowid, text, caption, sender) VALUES ($rowid, $text, $caption, $sender)");
 
+        var conflicts = false;
         foreach (var chat in ExportReader.ReadFile(_archiveRoot, file, stats))
         {
             var last = chat.Messages.Count > 0 ? chat.Messages[^1] : null;
@@ -141,7 +156,8 @@ public sealed class IndexStore : IDisposable
                 ("$preview", last is null ? null : Preview(last)), ("$count", chat.Messages.Count), ("$file", file.RelativePath));
             if (insertChat.ExecuteScalar() is not long chatRowId)
             {
-                continue; // the same chat id in two export files: the first one wins
+                conflicts = true; // the same chat id in two export files: the first one wins, this file is retried later
+                continue;
             }
 
             foreach (var m in chat.Messages)
@@ -164,10 +180,18 @@ public sealed class IndexStore : IDisposable
             }
         }
 
-        using var upsert = Command(tx, "INSERT OR REPLACE INTO files (path, size, mtime) VALUES ($path, $size, $mtime)");
-        Bind(upsert, ("$path", file.RelativePath), ("$size", file.Size), ("$mtime", mtime));
+        using var upsert = Command(tx, "INSERT OR REPLACE INTO files (path, size, mtime, has_conflicts) VALUES ($path, $size, $mtime, $conflicts)");
+        Bind(upsert, ("$path", file.RelativePath), ("$size", file.Size), ("$mtime", mtime), ("$conflicts", conflicts ? 1 : 0));
         upsert.ExecuteNonQuery();
         tx.Commit();
+    }
+
+    private bool HasConflicts(string path)
+    {
+        using var cmd = Connection.CreateCommand();
+        cmd.CommandText = "SELECT has_conflicts FROM files WHERE path = $path";
+        cmd.Parameters.AddWithValue("$path", path);
+        return cmd.ExecuteScalar() is long v && v == 1;
     }
 
     private void DeleteFile(string path, SqliteTransaction tx)

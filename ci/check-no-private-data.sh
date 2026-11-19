@@ -5,7 +5,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 bad=$(git ls-files | grep -E -i \
-  -e '\.(db|sqlite|sqlite3|crypt1[245]|vcf|opus|ogg|mp4|3gp|jpe?g|webp|heic)$' \
+  -e '\.(db|sqlite|sqlite3|crypt1[245]|crypt|key|vcf|opus|ogg|mp4|m4a|aac|amr|3gp|jpe?g|webp|heic|gif|zip|7z)$' \
+  -e '(^|/)WhatsApp Chat with .*\.txt$' \
+  -e '(^|/)_chat\.txt$' \
   -e '(^|/)(msgstore|wa)\.db' \
   -e '(^|/)(result\.json|json/[^/]+\.json)$' \
   | grep -v -E '^(docs/screenshots/|src/web/public/)' || true)
