@@ -47,6 +47,11 @@ public static class Program
                 $"error: no WhatsApp-Chat-Exporter JSON in {archive} — expected json/*.json (export with --per-chat) or result.json");
             return 2;
         }
+        if (options.Contacts is not null && !File.Exists(options.Contacts))
+        {
+            await error.WriteLineAsync($"error: contacts file not found: {Path.GetFullPath(options.Contacts)}");
+            return 2;
+        }
         foreach (var warning in parsed.Warnings)
         {
             await error.WriteLineAsync($"warning: {warning}");
@@ -57,7 +62,9 @@ public static class Program
             archive,
             dbPath,
             options.Port,
-            options.Listen));
+            options.Listen,
+            ContactsPath: options.Contacts is null ? null : Path.GetFullPath(options.Contacts),
+            CountryCode: options.CountryCode));
         await app.StartAsync();
 
         // every listener shares one port (0.0.0.0 shows up as "http://0.0.0.0:<port>", which includes loopback)
@@ -67,6 +74,15 @@ public static class Program
         await output.WriteLineAsync($"whatsapp-archive-explorer {Version()}");
         await output.WriteLineAsync($"archive: {archive}");
         await output.WriteLineAsync($"index:   {dbPath ?? "in memory"}");
+        var contacts = app.Services.GetRequiredService<IndexState>().Contacts;
+        if (options.Contacts is not null)
+        {
+            await output.WriteLineAsync($"contacts: {contacts.Contacts} names, {contacts.Numbers} numbers, {contacts.Photos} photos");
+            if (contacts.NationalNumbersIgnored > 0)
+            {
+                await error.WriteLineAsync($"warning: {contacts.NationalNumbersIgnored} numbers in the .vcf have no country code — add --country-code (e.g. 49)");
+            }
+        }
         await output.WriteLineAsync($"open:    {url}   (Ctrl+C to stop)");
         if (!options.NoBrowser && !BrowserLauncher.TryOpen(url))
         {

@@ -55,6 +55,32 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public void Parse_ContactsAndCountryCode()
+    {
+        var vcf = Path.Combine(_dir, "c.vcf");
+        File.WriteAllText(vcf, "");
+
+        var o = Options.Parse([_dir, "--contacts", vcf, "--country-code", "+49"]).Options!;
+
+        Assert.Equal(vcf, o.Contacts);
+        Assert.Equal("49", o.CountryCode);
+        Assert.NotNull(Options.Parse([_dir, "--country-code", "abc"]).Error);
+    }
+
+    [Fact]
+    public async Task Startup_RejectsMissingContactsFile()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "json"));
+        File.WriteAllText(Path.Combine(_dir, "json", "a.json"), "{}");
+        var err = new StringWriter();
+
+        var code = await Program.RunAsync([_dir, "--contacts", Path.Combine(_dir, "missing.vcf"), "--no-browser"], TextWriter.Null, err);
+
+        Assert.Equal(2, code);
+        Assert.Contains("contacts", err.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Parse_HelpAndVersion()
     {
         Assert.True(Options.Parse(["--help"]).Options!.ShowHelp);

@@ -46,7 +46,10 @@ public static class ExplorerHost
         configure?.Invoke(builder);
 
         var store = IndexStore.Open(settings.ArchiveRoot, settings.DbPath);
-        var state = new IndexState(store);
+        var contacts = settings.ContactsPath is null
+            ? Contacts.AddressBook.Empty
+            : Contacts.AddressBook.Load(settings.ContactsPath, settings.CountryCode);
+        var state = new IndexState(store, contacts);
         var media = new MediaFiles(settings.ArchiveRoot);
         var ui = new UiFiles();
         builder.Services.AddSingleton(state);

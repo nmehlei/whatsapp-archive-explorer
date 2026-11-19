@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using ArchiveExplorer.Contacts;
 using ArchiveExplorer.Import;
 using ArchiveExplorer.Web;
 using Microsoft.Data.Sqlite;
@@ -38,7 +39,7 @@ public sealed record MediaItem(long Id, long Ts, string Url, string? Mime, strin
 
 public sealed record MediaPage(IReadOnlyList<MediaItem> Items, int Total);
 
-public sealed class Queries(SqliteConnection connection)
+public sealed class Queries(SqliteConnection connection, AddressBook? contacts = null)
 {
     private const string MessageColumns = """
         m.rowid, m.id, m.key_id, m.ts, m.from_me, m.sender, m.is_system, m.text, m.caption, m.raw_html, m.is_media,
@@ -47,24 +48,36 @@ public sealed class Queries(SqliteConnection connection)
         m.reactions_json, m.edited, m.revisions_json
         """;
 
+    private readonly AddressBook _contacts = contacts ?? AddressBook.Empty;
+
+    /// <summary>Newest first. Names missing in the export come from the address book; the filter matches names and numbers, ignoring accents.</summary>
     public IReadOnlyList<ChatSummary> ListChats(string? filter)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT rowid, jid, name, kind, avatar, last_ts, last_preview, message_count FROM chats";
-        if (!string.IsNullOrWhiteSpace(filter))
-        {
-            cmd.CommandText += " WHERE instr(name_folded, $f) > 0";
-            cmd.Parameters.AddWithValue("$f", IndexStore.Fold(filter.Trim()));
-        }
-        cmd.CommandText += " ORDER BY last_ts IS NULL, last_ts DESC, rowid";
+        cmd.CommandText = "SELECT rowid, jid, name, kind, avatar, last_ts, last_preview, message_count FROM chats ORDER BY last_ts IS NULL, last_ts DESC, rowid";
+        var folded = string.IsNullOrWhiteSpace(filter) ? null : IndexStore.Fold(filter.Trim());
         var result = new List<ChatSummary>();
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            result.Add(new ChatSummary(r.GetInt64(0), r.GetString(1), NullableString(r, 2), r.GetString(3), !r.IsDBNull(4),
+            var jid = r.GetString(1);
+            var name = NullableString(r, 2) ?? _contacts.NameFor(jid);
+            if (folded is not null && !IndexStore.Fold($"{name} {jid.Split('@')[0]}").Contains(folded, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            result.Add(new ChatSummary(r.GetInt64(0), jid, name, r.GetString(3), !r.IsDBNull(4) || _contacts.PhotoFor(jid) is not null,
                 r.IsDBNull(5) ? null : r.GetInt64(5), NullableString(r, 6), r.GetInt32(7)));
         }
         return result;
+    }
+
+    public string? ChatJid(long chatId)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT jid FROM chats WHERE rowid = $id";
+        cmd.Parameters.AddWithValue("$id", chatId);
+        return cmd.ExecuteScalar() as string;
     }
 
     public string? AvatarPath(long chatId)
@@ -235,7 +248,7 @@ public sealed class Queries(SqliteConnection connection)
         using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT m.chat_rowid, c.name, m.rowid, m.ts, m.sender,
-                   snippet(messages_fts, -1, char(2), char(3), '…', 12)
+                   snippet(messages_fts, -1, char(2), char(3), '…', 12), c.jid
             FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid JOIN chats c ON c.rowid = m.chat_rowid
             WHERE {where}
             ORDER BY m.ts DESC, m.rowid DESC
@@ -248,8 +261,8 @@ public sealed class Queries(SqliteConnection connection)
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            hits.Add(new SearchHit(r.GetInt64(0), NullableString(r, 1), r.GetInt64(2), r.GetInt64(3), NullableString(r, 4),
-                r.IsDBNull(5) ? "" : r.GetString(5)));
+            hits.Add(new SearchHit(r.GetInt64(0), NullableString(r, 1) ?? _contacts.NameFor(r.GetString(6)), r.GetInt64(2), r.GetInt64(3),
+                Sender(NullableString(r, 4)), r.IsDBNull(5) ? "" : r.GetString(5)));
         }
         return (hits, total);
     }
@@ -348,7 +361,7 @@ public sealed class Queries(SqliteConnection connection)
         return cmd.ExecuteScalar() is long v ? v : null;
     }
 
-    private static MessageDto ReadMessage(SqliteDataReader r)
+    private MessageDto ReadMessage(SqliteDataReader r)
     {
         var html = NullableString(r, 9);
         return new MessageDto(
@@ -357,7 +370,7 @@ public sealed class Queries(SqliteConnection connection)
             KeyId: NullableString(r, 2),
             Ts: r.GetInt64(3),
             FromMe: r.GetInt64(4) == 1,
-            Sender: NullableString(r, 5),
+            Sender: Sender(NullableString(r, 5)),
             IsSystem: r.GetInt64(6) == 1,
             Text: NullableString(r, 7),
             Caption: NullableString(r, 8),
@@ -368,15 +381,31 @@ public sealed class Queries(SqliteConnection connection)
             ReplyKeyId: NullableString(r, 13),
             QuotedPreview: NullableString(r, 14),
             ReplyToId: r.IsDBNull(15) ? null : r.GetInt64(15),
-            Reactions: r.IsDBNull(16) ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(r.GetString(16)),
+            Reactions: r.IsDBNull(16) ? null : Reactions(JsonSerializer.Deserialize<Dictionary<string, string>>(r.GetString(16))),
             Edited: r.GetInt64(17) == 1,
             Revisions: r.IsDBNull(18) ? null : JsonSerializer.Deserialize<List<MessageRecord>>(r.GetString(18))?.Select(FromRecord).ToList());
     }
 
-    private static MessageDto FromRecord(MessageRecord m) => new(
-        0, m.Id, m.KeyId, m.Timestamp, m.FromMe, m.Sender, m.IsSystem, m.Text, m.Caption,
+    private string? Sender(string? sender) => _contacts.NameForSender(sender) ?? sender;
+
+    private Dictionary<string, string>? Reactions(IReadOnlyDictionary<string, string>? reactions)
+    {
+        if (reactions is null)
+        {
+            return null;
+        }
+        var mapped = new Dictionary<string, string>();
+        foreach (var (who, emoji) in reactions)
+        {
+            mapped[Sender(who) ?? who] = emoji;
+        }
+        return mapped;
+    }
+
+    private MessageDto FromRecord(MessageRecord m) => new(
+        0, m.Id, m.KeyId, m.Timestamp, m.FromMe, Sender(m.Sender), m.IsSystem, m.Text, m.Caption,
         m.RawHtml is null ? null : HtmlSafe.Sanitize(m.RawHtml), m.IsMedia, HtmlSafe.MediaUrl(m.MediaPath), m.Mime,
-        m.ReplyKeyId, m.QuotedPreview, null, m.Reactions, m.Edited, null);
+        m.ReplyKeyId, m.QuotedPreview, null, Reactions(m.Reactions), m.Edited, null);
 
     private static string? NullableString(SqliteDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
 }

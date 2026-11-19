@@ -7,4 +7,5 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Contact names and profile pictures from an address-book export (`--contacts file.vcf --country-code 49`).
 - Initial chat list, chat view, media viewer and full-text search for WhatsApp-Chat-Exporter JSON exports.

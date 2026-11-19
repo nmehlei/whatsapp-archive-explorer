@@ -11,7 +11,9 @@ public sealed record Options(
     bool NoCache,
     bool Verbose,
     bool ShowHelp,
-    bool ShowVersion)
+    bool ShowVersion,
+    string? Contacts = null,
+    string? CountryCode = null)
 {
     public const string Usage = """
         Usage: whatsapp-archive-explorer [--archive] <export folder> [options]
@@ -22,6 +24,9 @@ public sealed record Options(
         Options:
           --archive <dir>   The export folder (contains json/ or result.json). May also be given first.
           --port <n>        Port on 127.0.0.1 (default: a free port).
+          --contacts <vcf>  Names and profile pictures from an address-book export (.vcf from your phone's
+                            Contacts app or Google Contacts). WhatsApp backups contain neither.
+          --country-code <n> Country code for numbers saved without one in the .vcf (e.g. 49 for "0155…").
           --listen <ip>     Also listen on this address (0.0.0.0 = all) — anyone on the network can then read your chats!
           --no-browser      Do not open the browser.
           --no-cache        Keep the search index in memory only (rebuilt on every start).
@@ -34,7 +39,7 @@ public sealed record Options(
 
     public static ParseResult Parse(string[] args)
     {
-        string? archive = null, listen = null;
+        string? archive = null, listen = null, contacts = null, countryCode = null;
         int port = 0;
         bool noBrowser = false, noCache = false, verbose = false, help = false, version = false;
         var warnings = new List<string>();
@@ -70,6 +75,20 @@ public sealed record Options(
                     }
                     warnings.Add($"Listening on {listen}: anyone who can reach this computer over the network can read your chats.");
                     break;
+                case "--contacts":
+                    contacts = Value();
+                    if (contacts is null)
+                    {
+                        return Fail("--contacts needs a .vcf file");
+                    }
+                    break;
+                case "--country-code":
+                    countryCode = Value()?.TrimStart('+');
+                    if (countryCode is null || countryCode.Length is 0 or > 4 || !countryCode.All(char.IsAsciiDigit))
+                    {
+                        return Fail("--country-code needs digits, e.g. 49");
+                    }
+                    break;
                 case "--no-browser":
                     noBrowser = true;
                     break;
@@ -99,7 +118,7 @@ public sealed record Options(
         {
             return Fail("give the export folder: --archive <dir>");
         }
-        return new ParseResult(new Options(archive, port, listen, noBrowser, noCache, verbose, help, version), null, warnings);
+        return new ParseResult(new Options(archive, port, listen, noBrowser, noCache, verbose, help, version, contacts, countryCode), null, warnings);
 
         static ParseResult Fail(string error) => new(null, error, []);
     }

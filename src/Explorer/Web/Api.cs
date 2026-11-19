@@ -33,7 +33,16 @@ public static class Api
             WithQueries(state, queries => Results.Json(queries.Media(id, offset ?? 0, limit ?? 60))));
 
         app.MapGet("/api/chats/{id:long}/avatar", (long id) =>
-            WithQueries(state, queries => queries.AvatarPath(id) is { } path ? media.Serve(path) : Results.NotFound()));
+            WithQueries(state, queries =>
+            {
+                if (queries.AvatarPath(id) is { } path)
+                {
+                    return media.Serve(path);
+                }
+                return queries.ChatJid(id) is { } jid && state.Contacts.PhotoFor(jid) is { } photo
+                    ? Results.Bytes(photo.Bytes, photo.Mime)
+                    : Results.NotFound();
+            }));
 
         app.MapGet("/api/search", (string? q, long? chat, bool? fromMe, long? from, long? to, bool? media, int? offset, int? limit) =>
             WithQueries(state, queries =>
@@ -60,6 +69,6 @@ public static class Api
             return Results.Json(new { state = state.State }, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         using var connection = state.OpenReader();
-        return action(new Queries(connection));
+        return action(new Queries(connection, state.Contacts));
     }
 }

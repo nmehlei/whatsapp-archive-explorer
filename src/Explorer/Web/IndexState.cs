@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 namespace ArchiveExplorer.Web;
 
 /// <summary>Index lifecycle shared by the API and the background indexer. Counts only, never content.</summary>
-public sealed class IndexState(IndexStore store)
+public sealed class IndexState(IndexStore store, Contacts.AddressBook contacts)
 {
     private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -20,6 +20,8 @@ public sealed class IndexState(IndexStore store)
     public string? ErrorSummary { get; private set; }
 
     public SqliteConnection OpenReader() => store.OpenReader();
+
+    public Contacts.AddressBook Contacts => contacts;
 
     internal void Run()
     {

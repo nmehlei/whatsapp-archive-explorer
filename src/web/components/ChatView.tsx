@@ -141,6 +141,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
           <strong>{chat.kind === "calls" ? t("calls") : displayName(chat)}</strong>
           <span className="muted">
             {isGroup ? `${t("groupChat")} · ` : ""}
+            {chat.kind === "private" && /^\d+$/.test(chat.jid.split("@")[0] ?? "") ? `+${chat.jid.split("@")[0]} · ` : ""}
             {t("messageCount", { count: chat.messageCount })}
           </span>
         </span>

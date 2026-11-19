@@ -66,6 +66,19 @@ It reads the output of [WhatsApp-Chat-Exporter](https://github.com/KnugiHK/Whats
    - **Windows:** SmartScreen may show "Windows protected your PC" for a fresh download → *More info* →
      *Run anyway*.
 
+### Names and profile pictures
+
+WhatsApp backups contain neither contact names nor profile pictures (WhatsApp keeps them outside the backup).
+Export your address book as a `.vcf` file — e.g. *Contacts app → Import/Export → Export to storage* on Android,
+or [Google Contacts → Export → vCard](https://contacts.google.com) — and pass it along:
+
+```sh
+./whatsapp-archive-explorer path/to/export --contacts contacts.vcf --country-code 49
+```
+
+Names and photos are matched by phone number and used for chats, group senders and reactions. `--country-code`
+is needed for numbers saved without one (`0155…`). The file is only read; nothing is copied or stored.
+
 Options: `--port <n>`, `--no-browser`, `--no-cache`, `--verbose`, `--listen <ip>` (exposes your chats to the
 network — only on networks you trust), `--version`, `--help`.
 
