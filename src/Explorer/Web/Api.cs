@@ -45,7 +45,8 @@ public static class Api
         app.MapGet("/media/{**path}", (HttpContext context) =>
             media.Serve(context.Request.Path.Value!["/media/".Length..]));
 
-        app.MapFallback((HttpContext context) =>
+        // "{**path}" (not the default fallback pattern) so files with an extension (.js, .css) reach the UI too.
+        app.MapFallback("{**path}", (HttpContext context) =>
             context.Request.Path.StartsWithSegments("/api") ? Results.NotFound() : ui.Serve(context.Request.Path.Value ?? "/"));
     }
 

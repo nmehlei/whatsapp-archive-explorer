@@ -16,4 +16,19 @@
     <InternalsVisibleTo Include="Explorer.Tests" />
   </ItemGroup>
 
+  <!-- The web UI (Next.js static export) is built and embedded as resources "ui/<path>".
+       dotnet build -p:SkipWeb=true skips it (the server then shows a short notice instead of the UI). -->
+  <PropertyGroup>
+    <WebDir>$(MSBuildThisFileDirectory)..\web\</WebDir>
+  </PropertyGroup>
+
+  <Target Name="BuildWeb" BeforeTargets="BeforeBuild" Condition="'$(SkipWeb)' != 'true'">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(WebDir)" Condition="!Exists('$(WebDir)node_modules')" EnvironmentVariables="NEXT_TELEMETRY_DISABLED=1" />
+    <Exec Command="npm run build" WorkingDirectory="$(WebDir)" EnvironmentVariables="NEXT_TELEMETRY_DISABLED=1" />
+    <ItemGroup>
+      <WebOut Include="$(WebDir)out\**\*" />
+      <EmbeddedResource Include="@(WebOut)" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

@@ -25,7 +25,7 @@ public sealed partial class UiFiles
             using var stream = assembly.GetManifestResourceStream(name)!;
             using var ms = new MemoryStream();
             stream.CopyTo(ms);
-            _files[name[Prefix.Length..]] = ms.ToArray();
+            _files[name[Prefix.Length..].Replace('\\', '/')] = ms.ToArray(); // Windows builds use backslashes
         }
 
         var hashes = new SortedSet<string>(StringComparer.Ordinal);
@@ -46,6 +46,10 @@ public sealed partial class UiFiles
 
     public IResult Serve(string path)
     {
+        if (!HasUi && Path.HasExtension(path.Trim('/')))
+        {
+            return Results.NotFound();
+        }
         if (!HasUi)
         {
             return Results.Content(

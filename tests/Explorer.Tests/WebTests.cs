@@ -163,6 +163,18 @@ public sealed class WebTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Ui_FilesWithExtensionsAreRouted()
+    {
+        using var response = await _client.GetAsync("/_next/static/does-not-exist.js");
+
+        // routed to the UI handler (no UI embedded in tests → 404 from it, but with our security headers)
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.True(response.Headers.Contains("Content-Security-Policy"));
+        using var index = await _client.GetAsync("/");
+        Assert.Equal("text/html", index.Content.Headers.ContentType!.MediaType);
+    }
+
+    [Fact]
     public void Sanitizer_StripsScriptAndForeignLinks()
     {
         var html = HtmlSafe.Sanitize(

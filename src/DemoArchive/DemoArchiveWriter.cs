@@ -113,7 +113,7 @@ public static class DemoArchiveWriter
                 var keyIds = new List<string>();
                 for (var m = 0; m < count; m++)
                 {
-                    ts += random.NextInt64(30, step * 2);
+                    ts = Math.Min(ts + random.NextInt64(30, step * 2), end - (count - m) * 60L); // stay inside the demo period
                     var id = (c * 100_000 + m + 1).ToString(CultureInfo.InvariantCulture);
                     var keyId = $"3EB0{random.NextInt64(0, long.MaxValue):X16}";
                     keyIds.Add(keyId);
