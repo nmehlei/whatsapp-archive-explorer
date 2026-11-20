@@ -30,6 +30,10 @@ public static class Api
         app.MapGet("/api/chats/{id:long}/search", (long id, string? q) =>
             WithQueries(state, queries => Results.Json(queries.SearchInChat(id, q ?? ""))));
 
+        app.MapGet("/api/chats/{id:long}/timeline", (long id, int? tz) =>
+            WithQueries(state, queries =>
+                ChatExists(queries, id) ? Results.Json(queries.Timeline(id, tz ?? 0)) : Results.NotFound()));
+
         app.MapGet("/api/chats/{id:long}/media", (long id, int? offset, int? limit) =>
             WithQueries(state, queries => Results.Json(queries.Media(id, offset ?? 0, limit ?? 60))));
 

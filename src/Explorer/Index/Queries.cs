@@ -37,6 +37,12 @@ public sealed record Page<T>(IReadOnlyList<T> Items, bool HasMoreBefore, bool Ha
 
 public sealed record MediaItem(long Id, long Ts, string Url, string? Mime, string? Caption);
 
+/// <summary>Messages on one day; <see cref="Day"/> counts days since 1970-01-01 in the viewer's UTC offset.</summary>
+public sealed record TimelineDay(long Day, int Count);
+
+/// <summary>A search hit inside one chat: enough to jump to it and to place it on the timeline.</summary>
+public sealed record ChatHit(long Id, long Ts);
+
 public sealed record MediaPage(IReadOnlyList<MediaItem> Items, int Total);
 
 public sealed class Queries(SqliteConnection connection, AddressBook? contacts = null)
@@ -186,8 +192,8 @@ public sealed class Queries(SqliteConnection connection, AddressBook? contacts =
         return new MediaPage(items, total);
     }
 
-    /// <summary>Ids of the messages in a chat that match, oldest first.</summary>
-    public IReadOnlyList<long> SearchInChat(long chatId, string q)
+    /// <summary>The messages in a chat that match, oldest first.</summary>
+    public IReadOnlyList<ChatHit> SearchInChat(long chatId, string q)
     {
         var match = FtsQuery(q);
         if (match is null)
@@ -196,18 +202,44 @@ public sealed class Queries(SqliteConnection connection, AddressBook? contacts =
         }
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            SELECT m.rowid FROM messages_fts f JOIN messages m ON m.rowid = f.rowid
+            SELECT m.rowid, m.ts FROM messages_fts f JOIN messages m ON m.rowid = f.rowid
             WHERE messages_fts MATCH $q AND m.chat_rowid = $c ORDER BY m.ts, m.rowid
             """;
         cmd.Parameters.AddWithValue("$q", match);
         cmd.Parameters.AddWithValue("$c", chatId);
-        var ids = new List<long>();
+        var hits = new List<ChatHit>();
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            ids.Add(r.GetInt64(0));
+            hits.Add(new ChatHit(r.GetInt64(0), r.GetInt64(1)));
         }
-        return ids;
+        return hits;
+    }
+
+    /// <summary>
+    /// Message count per calendar day of a chat, oldest first, days without messages left out. Days are cut at
+    /// midnight in <paramref name="offsetMinutes"/> east of UTC (the viewer's zone), clamped to real zones (±14 h).
+    /// </summary>
+    public IReadOnlyList<TimelineDay> Timeline(long chatId, int offsetMinutes)
+    {
+        var offset = Math.Clamp(offsetMinutes, -14 * 60, 14 * 60) * 60L;
+        using var cmd = connection.CreateCommand();
+        // floor division: CAST truncates towards zero, which would merge the day before 1970 into day 0
+        cmd.CommandText = """
+            SELECT day, count(*) FROM (
+                SELECT CAST((ts + $o) / 86400 AS INTEGER) - ((ts + $o) < 0 AND (ts + $o) % 86400 != 0) AS day
+                FROM messages WHERE chat_rowid = $c)
+            GROUP BY day ORDER BY day
+            """;
+        cmd.Parameters.AddWithValue("$c", chatId);
+        cmd.Parameters.AddWithValue("$o", offset);
+        var days = new List<TimelineDay>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            days.Add(new TimelineDay(r.GetInt64(0), r.GetInt32(1)));
+        }
+        return days;
     }
 
     public (IReadOnlyList<SearchHit> Hits, int Total) Search(string q, long? chatId, bool? fromMe, long? fromTs, long? toTs, bool? hasMedia, int offset, int limit = 50)

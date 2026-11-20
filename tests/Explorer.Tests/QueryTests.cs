@@ -134,10 +134,10 @@ public sealed class QueryTests : IDisposable
     {
         var chat = BusiestPrivateChat();
 
-        var ids = _q.SearchInChat(chat.Id, "good");
+        var hits = _q.SearchInChat(chat.Id, "good");
 
-        Assert.NotEmpty(ids);
-        Assert.Equal(ids.Order(), ids);
+        Assert.NotEmpty(hits);
+        Assert.Equal(hits.OrderBy(h => h.Ts).ThenBy(h => h.Id), hits);
     }
 
     [Fact]

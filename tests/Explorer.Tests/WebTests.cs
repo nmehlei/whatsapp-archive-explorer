@@ -160,7 +160,13 @@ public sealed class WebTests : IAsyncLifetime
         var page = await Json($"/api/chats/{chatId}/messages?around={messageId}&limit=10");
         Assert.Contains(page.GetProperty("items").EnumerateArray(), m => m.GetProperty("id").GetInt64() == messageId);
         var inChat = await Json($"/api/chats/{chatId}/search?q=lighthouse");
-        Assert.Equal(messageId, inChat[0].GetInt64());
+        Assert.Equal(messageId, inChat[0].GetProperty("id").GetInt64());
+        Assert.Equal(hit.GetProperty("ts").GetInt64(), inChat[0].GetProperty("ts").GetInt64());
+
+        var timeline = await Json($"/api/chats/{chatId}/timeline?tz=60");
+        Assert.True(timeline.GetArrayLength() > 1);
+        Assert.True(timeline[0].GetProperty("count").GetInt32() > 0);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync("/api/chats/999999/timeline")).StatusCode);
 
         Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync("/api/chats/999999/messages")).StatusCode);
         var media = await Json($"/api/chats/{chatId}/media?limit=3");
