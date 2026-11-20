@@ -237,6 +237,10 @@ public sealed class IndexStore : IDisposable
         {
             reset.ExecuteNonQuery();
         }
+        using (var empty = Command(tx, "UPDATE chats SET hidden = 1 WHERE message_count = 0"))
+        {
+            empty.ExecuteNonQuery(); // address-book contacts the exporter adds without any conversation
+        }
         using var set = Command(tx, "UPDATE chats SET hidden = 1 WHERE jid = $jid");
         var parameter = set.Parameters.Add("$jid", SqliteType.Text);
         foreach (var jid in hidden)

@@ -57,6 +57,20 @@ public sealed class HiddenChatsTests : IDisposable
     }
 
     [Fact]
+    public void ChatsWithoutMessagesAreHidden()
+    {
+        // the exporter adds address-book contacts without any conversation (--enrich-from-vcards) as empty chats
+        WriteExport();
+        File.WriteAllText(Path.Combine(_dir, "json", "d.json"), """{ "4915550100009@s.whatsapp.net": { "name": "Only A Contact", "messages": {} } }""");
+        using var store = IndexStore.Open(_dir, null);
+        store.Refresh(null);
+        var q = new Queries(store.Connection);
+
+        Assert.DoesNotContain(q.ListChats(null), c => c.Jid.StartsWith("4915550100009", StringComparison.Ordinal));
+        Assert.Contains(q.ListChats(null, includeHidden: true), c => c.Jid.StartsWith("4915550100009", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void WithoutMsgstoreNothingIsHidden()
     {
         WriteExport();
