@@ -162,7 +162,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; }
 .indexing h1 { font-weight: 400; font-size: 22px; }
 .indexing progress { width: min(420px, 90vw); accent-color: var(--accent); }
 
-/* Narrow screens: one pane at a time */
 /* Timeline: the chat's whole life as an activity silhouette; click or drag to travel through it. */
 .timeline-wrap { flex-shrink: 0; position: relative; z-index: 2; padding: 0 16px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
 .timeline { position: relative; height: 46px; padding: 6px 0 14px; cursor: pointer; touch-action: none; user-select: none; outline: none; }
@@ -183,6 +182,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; }
 .timeline-tip span { color: var(--muted); font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { .timeline-bar, .timeline-marker { transition: none; } }
 
+/* Narrow screens: one pane at a time */
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; }
   .app.has-chat .sidebar { display: none; }

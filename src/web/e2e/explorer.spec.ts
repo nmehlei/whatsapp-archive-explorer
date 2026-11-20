@@ -63,6 +63,33 @@ test("travels through the chat with the timeline", async ({ page }) => {
   await expect(timeline).toHaveAttribute("aria-valuenow", last!);
 });
 
+test("a timeline jump wins over an older page still loading", async ({ page }) => {
+  await page.locator(".chat-row").nth(1).click();
+  const timeline = page.getByRole("slider", { name: "Timeline" });
+  await expect(timeline).toBeVisible();
+  let held = 0;
+  await page.route(/\/messages\?.*before=/, async (route) => {
+    held++;
+    await new Promise((r) => setTimeout(r, 1500)); // the older page arrives after the jump
+    await route.continue();
+  });
+  for (let i = 0; i < 20 && held === 0; i++) {
+    await page.locator(".messages").evaluate((el) => {
+      (el.querySelector("[data-virtuoso-scroller]") ?? el).scrollTop = 0;
+    });
+    await page.waitForTimeout(200);
+  }
+  expect(held).toBeGreaterThan(0);
+  const box = (await timeline.boundingBox())!;
+  await page.mouse.click(box.x + 2, box.y + box.height / 2);
+  await page.waitForTimeout(2500);
+
+  await expect(timeline).toHaveAttribute("aria-valuenow", "0");
+  const days = await page.locator(".day-divider").evaluateAll((els) => els.map((e) => Number(e.getAttribute("data-ts"))));
+  expect(days.length).toBeGreaterThan(0);
+  expect(days).toEqual([...days].sort((a, b) => a - b)); // no page from the newest messages glued in front
+});
+
 test("opens an image in the viewer", async ({ page }) => {
   await page.locator(".chat-row").nth(1).click();
   await page.getByRole("button", { name: "Media" }).click();

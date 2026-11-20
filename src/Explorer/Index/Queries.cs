@@ -216,31 +216,45 @@ public sealed class Queries(SqliteConnection connection, AddressBook? contacts =
         return hits;
     }
 
+    /// <summary>WhatsApp did not exist before 2009: anything earlier is a placeholder (unreadable timestamps are kept as 0).</summary>
+    private const long TimelineFloor = 1_230_768_000; // 2009-01-01
+
     /// <summary>
     /// Message count per calendar day of a chat, oldest first, days without messages left out. Days are cut at
-    /// midnight in <paramref name="offsetMinutes"/> east of UTC (the viewer's zone), clamped to real zones (±14 h).
+    /// midnight in the viewer's <paramref name="zone"/> (IANA id, daylight saving time included, exactly like the
+    /// browser's own dates); when the zone is unknown, at a fixed <paramref name="offsetMinutes"/> east of UTC,
+    /// clamped to real zones (±14 h). Placeholder timestamps (before 2009, or the future) are left out so they
+    /// cannot stretch the timeline.
     /// </summary>
-    public IReadOnlyList<TimelineDay> Timeline(long chatId, int offsetMinutes)
+    public IReadOnlyList<TimelineDay> Timeline(long chatId, string? zone, int offsetMinutes)
     {
-        var offset = Math.Clamp(offsetMinutes, -14 * 60, 14 * 60) * 60L;
+        var tz = zone is { Length: > 0 and <= 64 } && TimeZoneInfo.TryFindSystemTimeZoneById(zone, out var found) ? found : null;
+        var offset = TimeSpan.FromMinutes(Math.Clamp(offsetMinutes, -14 * 60, 14 * 60));
         using var cmd = connection.CreateCommand();
-        // floor division: CAST truncates towards zero, which would merge the day before 1970 into day 0
-        cmd.CommandText = """
-            SELECT day, count(*) FROM (
-                SELECT CAST((ts + $o) / 86400 AS INTEGER) - ((ts + $o) < 0 AND (ts + $o) % 86400 != 0) AS day
-                FROM messages WHERE chat_rowid = $c)
-            GROUP BY day ORDER BY day
-            """;
+        cmd.CommandText = "SELECT ts FROM messages WHERE chat_rowid = $c AND ts >= $from AND ts <= $to ORDER BY ts";
         cmd.Parameters.AddWithValue("$c", chatId);
-        cmd.Parameters.AddWithValue("$o", offset);
+        cmd.Parameters.AddWithValue("$from", TimelineFloor);
+        cmd.Parameters.AddWithValue("$to", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 86_400);
         var days = new List<TimelineDay>();
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            days.Add(new TimelineDay(r.GetInt64(0), r.GetInt32(1)));
+            var utc = DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0));
+            var local = tz is null ? utc.ToOffset(offset) : TimeZoneInfo.ConvertTime(utc, tz);
+            var day = DateOnly.FromDateTime(local.DateTime).DayNumber - UnixEpochDay;
+            if (days.Count > 0 && days[^1].Day == day)
+            {
+                days[^1] = days[^1] with { Count = days[^1].Count + 1 };
+            }
+            else
+            {
+                days.Add(new TimelineDay(day, 1));
+            }
         }
         return days;
     }
+
+    private static readonly int UnixEpochDay = new DateOnly(1970, 1, 1).DayNumber;
 
     public (IReadOnlyList<SearchHit> Hits, int Total) Search(string q, long? chatId, bool? fromMe, long? fromTs, long? toTs, bool? hasMedia, int offset, int limit = 50)
     {

@@ -26,14 +26,20 @@ describe("buildTimeline", () => {
   });
 
   it("starts each month bucket at local midnight on the 1st, so a jump lands on its first message", () => {
-    const tl = buildTimeline([{ day: day(2019, 3, 14), count: 1 }, { day: day(2019, 9, 1), count: 1 }]);
+    const tl = buildTimeline([
+      { day: day(2019, 3, 14), count: 1 },
+      { day: day(2019, 9, 1), count: 1 },
+    ]);
 
     expect(tl.buckets[0]!.start).toBe(new Date(2019, 2, 1).getTime() / 1000);
     expect(tl.buckets[1]!.start).toBe(new Date(2019, 3, 1).getTime() / 1000);
   });
 
   it("switches to days when the chat spans less than about three months", () => {
-    const tl = buildTimeline([{ day: day(2020, 5, 30), count: 2 }, { day: day(2020, 6, 2), count: 3 }]);
+    const tl = buildTimeline([
+      { day: day(2020, 5, 30), count: 2 },
+      { day: day(2020, 6, 2), count: 3 },
+    ]);
 
     expect(tl.granularity).toBe("day");
     expect(tl.buckets.map((b) => [b.month, b.day, b.count])).toEqual([
@@ -52,11 +58,20 @@ describe("buildTimeline", () => {
 });
 
 describe("bucketAt", () => {
-  const tl = buildTimeline([{ day: day(2016, 1, 5), count: 1 }, { day: day(2019, 3, 2), count: 1 }]);
+  const tl = buildTimeline([
+    { day: day(2016, 1, 5), count: 1 },
+    { day: day(2019, 3, 2), count: 1 },
+  ]);
 
   it("finds the bucket of a message timestamp", () => {
-    expect(tl.buckets[bucketAt(tl, local(2016, 1, 31, 23))!]).toMatchObject({ year: 2016, month: 0 });
-    expect(tl.buckets[bucketAt(tl, local(2018, 7, 1))!]).toMatchObject({ year: 2018, month: 6 });
+    expect(tl.buckets[bucketAt(tl, local(2016, 1, 31, 23))!]).toMatchObject({
+      year: 2016,
+      month: 0,
+    });
+    expect(tl.buckets[bucketAt(tl, local(2018, 7, 1))!]).toMatchObject({
+      year: 2018,
+      month: 6,
+    });
   });
 
   it("clamps timestamps outside the chat to its ends", () => {
@@ -68,15 +83,38 @@ describe("bucketAt", () => {
 
 describe("labelSteps", () => {
   it("labels every year when there is room and thins labels when there is not", () => {
-    const tl = buildTimeline([{ day: day(2010, 1, 1), count: 1 }, { day: day(2025, 12, 31), count: 1 }]);
+    const tl = buildTimeline([
+      { day: day(2010, 1, 1), count: 1 },
+      { day: day(2025, 12, 31), count: 1 },
+    ]);
     const years = (width: number) => labelSteps(tl, width).map((l) => l.text);
 
-    expect(years(1200)).toEqual(["2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"]);
+    expect(years(1200)).toEqual([
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023",
+      "2024",
+      "2025",
+    ]);
     expect(years(300)).toEqual(["2010", "2015", "2020", "2025"]);
   });
 
   it("labels the first bucket of every year and places it at the bucket's position", () => {
-    const tl = buildTimeline([{ day: day(2016, 7, 1), count: 1 }, { day: day(2017, 6, 1), count: 1 }]);
+    const tl = buildTimeline([
+      { day: day(2016, 7, 1), count: 1 },
+      { day: day(2017, 6, 1), count: 1 },
+    ]);
 
     expect(labelSteps(tl, 800)).toEqual([
       { index: 0, text: "2016" },
@@ -87,7 +125,10 @@ describe("labelSteps", () => {
 
 describe("labelSteps for a chat that starts late in a year", () => {
   it("drops the first label when it would crowd the next one", () => {
-    const tl = buildTimeline([{ day: day(2019, 12, 1), count: 1 }, { day: day(2026, 11, 1), count: 1 }]);
+    const tl = buildTimeline([
+      { day: day(2019, 12, 1), count: 1 },
+      { day: day(2026, 11, 1), count: 1 },
+    ]);
 
     expect(labelSteps(tl, 880).map((l) => l.text)).toEqual(["2020", "2021", "2022", "2023", "2024", "2025", "2026"]);
     expect(labelSteps(tl, 880 * 12).map((l) => l.text)[0]).toBe("2019"); // room enough: kept

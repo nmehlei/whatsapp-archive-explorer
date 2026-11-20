@@ -4,7 +4,10 @@ import type { ChatHit, ChatSummary, MediaItem, Message, Page, SearchFilters, Sea
 export class IndexingError extends Error {}
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal, headers: { Accept: "application/json" } });
+  const response = await fetch(path, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
   if (response.status === 503) throw new IndexingError("indexing");
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return (await response.json()) as T;
@@ -25,14 +28,18 @@ export const api = {
     get<ChatSummary[]>(`/api/chats${query({ q, hidden: hidden || undefined })}`, signal),
   messages: (
     chatId: number,
-    cursor: { before?: number; after?: number; around?: number; aroundTs?: number },
+    cursor: {
+      before?: number;
+      after?: number;
+      around?: number;
+      aroundTs?: number;
+    },
     limit = 80,
     signal?: AbortSignal,
   ) => get<Page<Message>>(`/api/chats/${chatId}/messages${query({ ...cursor, limit })}`, signal),
-  searchInChat: (chatId: number, q: string, signal?: AbortSignal) =>
-    get<ChatHit[]>(`/api/chats/${chatId}/search${query({ q })}`, signal),
-  timeline: (chatId: number, tz: number, signal?: AbortSignal) =>
-    get<TimelineDay[]>(`/api/chats/${chatId}/timeline${query({ tz })}`, signal),
+  searchInChat: (chatId: number, q: string, signal?: AbortSignal) => get<ChatHit[]>(`/api/chats/${chatId}/search${query({ q })}`, signal),
+  timeline: (chatId: number, zone: string | undefined, tz: number, signal?: AbortSignal) =>
+    get<TimelineDay[]>(`/api/chats/${chatId}/timeline${query({ zone, tz })}`, signal),
   search: (q: string, filters: SearchFilters, offset = 0, signal?: AbortSignal) =>
     get<{ hits: SearchHit[]; total: number }>(`/api/search${query({ q, ...filters, offset })}`, signal),
   media: (chatId: number, offset = 0, limit = 60, signal?: AbortSignal) =>

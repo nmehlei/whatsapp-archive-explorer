@@ -46,7 +46,7 @@ public sealed class TimelineTests : IDisposable
         var q = Index(Utc(2019, 3, 2), Utc(2016, 1, 5, 8), Utc(2016, 1, 5, 20), Utc(2019, 3, 2, 13));
         var chat = q.ListChats(null).Single();
 
-        var days = q.Timeline(chat.Id, 0);
+        var days = q.Timeline(chat.Id, null, 0);
 
         Assert.Equal([new TimelineDay(Day(2016, 1, 5), 2), new TimelineDay(Day(2019, 3, 2), 2)], days);
         Assert.Equal(chat.MessageCount, days.Sum(d => d.Count));
@@ -59,9 +59,9 @@ public sealed class TimelineTests : IDisposable
         var q = Index(Utc(2020, 6, 1, 23, 30));
         var chat = q.ListChats(null).Single();
 
-        Assert.Equal(Day(2020, 6, 2), Assert.Single(q.Timeline(chat.Id, 60)).Day);
-        Assert.Equal(Day(2020, 6, 1), Assert.Single(q.Timeline(chat.Id, -300)).Day);
-        Assert.Equal(Day(2020, 6, 1), Assert.Single(q.Timeline(chat.Id, 0)).Day);
+        Assert.Equal(Day(2020, 6, 2), Assert.Single(q.Timeline(chat.Id, null, 60)).Day);
+        Assert.Equal(Day(2020, 6, 1), Assert.Single(q.Timeline(chat.Id, null, -300)).Day);
+        Assert.Equal(Day(2020, 6, 1), Assert.Single(q.Timeline(chat.Id, null, 0)).Day);
     }
 
     [Fact]
@@ -70,8 +70,41 @@ public sealed class TimelineTests : IDisposable
         var q = Index(Utc(2020, 6, 1, 0, 30));
         var chat = q.ListChats(null).Single();
 
-        Assert.Equal(q.Timeline(chat.Id, 14 * 60), q.Timeline(chat.Id, 100_000));
-        Assert.Equal(q.Timeline(chat.Id, -14 * 60), q.Timeline(chat.Id, -100_000));
+        Assert.Equal(q.Timeline(chat.Id, null, 14 * 60), q.Timeline(chat.Id, null, 100_000));
+        Assert.Equal(q.Timeline(chat.Id, null, -14 * 60), q.Timeline(chat.Id, null, -100_000));
+    }
+
+    [Fact]
+    public void ZoneFollowsDaylightSavingTime_AsTheBrowserDoes()
+    {
+        // 00:30 CEST on 1 July is 22:30 UTC on 30 June. Asked in winter, the fixed offset (+60) would say 30 June;
+        // the zone knows July is summer time, so the bar and the browser's own dates agree.
+        var q = Index(Utc(2019, 6, 30, 22, 30), Utc(2019, 1, 15, 23, 30));
+        var chat = q.ListChats(null).Single();
+
+        var days = q.Timeline(chat.Id, "Europe/Berlin", 60);
+
+        Assert.Equal([Day(2019, 1, 16), Day(2019, 7, 1)], days.Select(d => d.Day));
+    }
+
+    [Fact]
+    public void UnknownZoneFallsBackToTheOffset()
+    {
+        var q = Index(Utc(2019, 6, 30, 22, 30));
+        var chat = q.ListChats(null).Single();
+
+        Assert.Equal(q.Timeline(chat.Id, null, 60), q.Timeline(chat.Id, "Not/AZone", 60));
+    }
+
+    [Fact]
+    public void PlaceholderTimestampsStayOffTheTimeline()
+    {
+        // the importer keeps unreadable timestamps as 0 and clamps absurd ones to the year 3000; neither may
+        // stretch a 2015 chat back to 1970 or forward by ten centuries
+        var q = Index(0, Utc(2015, 5, 1), Utc(2016, 5, 1), 32_503_680_000);
+        var chat = q.ListChats(null).Single();
+
+        Assert.Equal([Day(2015, 5, 1), Day(2016, 5, 1)], q.Timeline(chat.Id, null, 0).Select(d => d.Day));
     }
 
     [Fact]
@@ -79,7 +112,7 @@ public sealed class TimelineTests : IDisposable
     {
         var q = Index(Utc(2020, 6, 1));
 
-        Assert.Empty(q.Timeline(999_999, 0));
+        Assert.Empty(q.Timeline(999_999, null, 0));
     }
 
     [Fact]

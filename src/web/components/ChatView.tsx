@@ -4,11 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { api } from "@/lib/api";
 import { displayName, formatDayDivider, sameDay } from "@/lib/format";
-import {
-  buildTimeline,
-  viewerOffsetMinutes,
-  type TimelineDay,
-} from "@/lib/timeline";
+import { buildTimeline, viewerOffsetMinutes, viewerZone, type TimelineDay } from "@/lib/timeline";
 import { useUi } from "@/lib/ui";
 import type { ChatHit, ChatSummary, Message } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -40,9 +36,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
   const [moreAfter, setMoreAfter] = useState(false);
   const [loadKey, setLoadKey] = useState(0);
   const [highlight, setHighlight] = useState<number | null>(targetId);
-  const [align, setAlign] = useState<"start" | "center" | "end">(
-    targetId === null ? "end" : "center",
-  );
+  const [align, setAlign] = useState<"start" | "center" | "end">(targetId === null ? "end" : "center");
   const [days, setDays] = useState<{
     chatId: number;
     days: TimelineDay[];
@@ -61,17 +55,21 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
     index: number;
   } | null>(null);
 
+  /**
+   * Bumped by every load (open, search hit, date or timeline jump): a page request that comes back after a newer
+   * load started belongs to the old position and is dropped, so pages from two eras are never glued together.
+   */
+  const generation = useRef(0);
+
   const load = useCallback(
     /** `quiet`: a timeline jump: show the moment at the top, without highlighting a message. */
     async (cursor: { around?: number; aroundTs?: number }, quiet = false) => {
+      const gen = ++generation.current;
       loading.current = true;
       try {
         const page = await api.messages(chat.id, cursor, PAGE);
-        const target =
-          cursor.around ??
-          page.items.find(
-            (m) => cursor.aroundTs !== undefined && m.ts >= cursor.aroundTs,
-          )?.id;
+        if (gen !== generation.current) return;
+        const target = cursor.around ?? page.items.find((m) => cursor.aroundTs !== undefined && m.ts >= cursor.aroundTs)?.id;
         const index =
           target === undefined
             ? page.items.length - 1
@@ -89,7 +87,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
         setTopTs(page.items[Math.max(0, index)]?.ts ?? null);
         setLoadKey((k) => k + 1);
       } finally {
-        loading.current = false;
+        if (gen === generation.current) loading.current = false;
       }
     },
     [chat.id],
@@ -101,17 +99,15 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
 
   useEffect(() => {
     const abort = new AbortController();
-    api.timeline(chat.id, viewerOffsetMinutes(), abort.signal).then(
+    api.timeline(chat.id, viewerZone(), viewerOffsetMinutes(), abort.signal).then(
       (d) => setDays({ chatId: chat.id, days: d }),
       () => {},
     );
     return () => abort.abort();
   }, [chat.id]);
-  const timeline = useMemo(
-    () => buildTimeline(days?.chatId === chat.id ? days.days : []),
-    [days, chat.id],
-  );
-  const hitTimes = useMemo(() => hits.map((h) => h.ts), [hits]);
+  const timeline = useMemo(() => buildTimeline(days?.chatId === chat.id ? days.days : []), [days, chat.id]);
+  // dots only while the search they belong to is open
+  const hitTimes = useMemo(() => (searchOpen ? hits.map((h) => h.ts) : []), [hits, searchOpen]);
 
   const jumpTo = useCallback(
     (messageId: number) => {
@@ -132,30 +128,30 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
 
   const older = useCallback(async () => {
     if (!moreBefore || loading.current || items.length === 0) return;
+    const gen = generation.current;
     loading.current = true;
     try {
       const page = await api.messages(chat.id, { before: items[0]!.id }, PAGE);
+      if (gen !== generation.current) return;
       setFirstIndex((f) => f - page.items.length);
       setItems((prev) => [...page.items, ...prev]);
       setMoreBefore(page.hasMoreBefore);
     } finally {
-      loading.current = false;
+      if (gen === generation.current) loading.current = false;
     }
   }, [chat.id, items, moreBefore]);
 
   const newer = useCallback(async () => {
     if (!moreAfter || loading.current || items.length === 0) return;
+    const gen = generation.current;
     loading.current = true;
     try {
-      const page = await api.messages(
-        chat.id,
-        { after: items[items.length - 1]!.id },
-        PAGE,
-      );
+      const page = await api.messages(chat.id, { after: items[items.length - 1]!.id }, PAGE);
+      if (gen !== generation.current) return;
       setItems((prev) => [...prev, ...page.items]);
       setMoreAfter(page.hasMoreAfter);
     } finally {
-      loading.current = false;
+      if (gen === generation.current) loading.current = false;
     }
   }, [chat.id, items, moreAfter]);
 
@@ -175,9 +171,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
   };
 
   const openMedia = (message: Message) => {
-    const visual = items.filter(
-      (m) => m.mediaUrl && /^(image|video)\//.test(m.mime ?? ""),
-    );
+    const visual = items.filter((m) => m.mediaUrl && /^(image|video)\//.test(m.mime ?? ""));
     const list: ViewerItem[] = visual.map((m) => ({
       id: m.id,
       ts: m.ts,
@@ -194,34 +188,21 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
     });
   };
 
-  const searchTerms = useMemo(
-    () => [...terms, ...(hits.length > 0 ? q.split(/\s+/) : [])],
-    [terms, hits.length, q],
-  );
+  const searchTerms = useMemo(() => [...terms, ...(hits.length > 0 ? q.split(/\s+/) : [])], [terms, hits.length, q]);
   const isGroup = chat.kind === "group";
 
   return (
     <section className="chat">
       <header className="pane-header chat-header">
-        <button
-          type="button"
-          className="icon back"
-          onClick={onBack}
-          aria-label={t("backToList")}
-        >
+        <button type="button" className="icon back" onClick={onBack} aria-label={t("backToList")}>
           ‹
         </button>
         <Avatar chat={chat} size={40} />
         <span className="chat-title">
-          <strong>
-            {chat.kind === "calls" ? t("calls") : displayName(chat)}
-          </strong>
+          <strong>{chat.kind === "calls" ? t("calls") : displayName(chat)}</strong>
           <span className="muted">
             {isGroup ? `${t("groupChat")} · ` : ""}
-            {chat.kind === "private" &&
-            /^\d+$/.test(chat.jid.split("@")[0] ?? "")
-              ? `+${chat.jid.split("@")[0]} · `
-              : ""}
+            {chat.kind === "private" && /^\d+$/.test(chat.jid.split("@")[0] ?? "") ? `+${chat.jid.split("@")[0]} · ` : ""}
             {t("messageCount", { count: chat.messageCount })}
           </span>
         </span>
@@ -236,20 +217,12 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
                 const [y, m, d] = e.target.value.split("-").map(Number);
                 if (y && m && d)
                   void load({
-                    aroundTs: Math.floor(
-                      new Date(y, m - 1, d).getTime() / 1000,
-                    ),
+                    aroundTs: Math.floor(new Date(y, m - 1, d).getTime() / 1000),
                   });
               }}
             />
           </label>
-          <button
-            type="button"
-            className="icon"
-            onClick={() => setGalleryOpen((v) => !v)}
-            aria-label={t("media")}
-            title={t("media")}
-          >
+          <button type="button" className="icon" onClick={() => setGalleryOpen((v) => !v)} aria-label={t("media")} title={t("media")}>
             🖼
           </button>
           <button
@@ -281,19 +254,9 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
             aria-label={t("searchInChat")}
           />
           <span className="muted hit-count">
-            {hits.length === 0
-              ? q && hitIndex === -1
-                ? t("noHits")
-                : ""
-              : t("hitCount", { current: hitIndex + 1, total: hits.length })}
+            {hits.length === 0 ? (q && hitIndex === -1 ? t("noHits") : "") : t("hitCount", { current: hitIndex + 1, total: hits.length })}
           </span>
-          <button
-            type="button"
-            className="icon"
-            onClick={() => step(-1)}
-            disabled={hitIndex <= 0}
-            aria-label={t("previous")}
-          >
+          <button type="button" className="icon" onClick={() => step(-1)} disabled={hitIndex <= 0} aria-label={t("previous")}>
             ▲
           </button>
           <button
@@ -308,12 +271,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
         </form>
       )}
 
-      <Timeline
-        timeline={timeline}
-        currentTs={topTs}
-        hits={hitTimes}
-        onJump={(ts) => void load({ aroundTs: ts }, true)}
-      />
+      <Timeline timeline={timeline} currentTs={topTs} hits={hitTimes} onJump={(ts) => load({ aroundTs: ts }, true)} />
 
       <div className="chat-body">
         {items.length === 0 ? (
@@ -338,9 +296,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
               const prev = items[index - firstIndex - 1];
               return (
                 <>
-                  {(!prev || !sameDay(prev.ts, m.ts)) && (
-                    <DayDivider ts={m.ts} />
-                  )}
+                  {(!prev || !sameDay(prev.ts, m.ts)) && <DayDivider ts={m.ts} />}
                   <MessageBubble
                     message={m}
                     isGroup={isGroup}
@@ -382,7 +338,7 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
 function DayDivider({ ts }: { ts: number }) {
   const { t, intl } = useUi();
   return (
-    <div className="day-divider">
+    <div className="day-divider" data-ts={ts}>
       <span>{formatDayDivider(ts, intl, t)}</span>
     </div>
   );

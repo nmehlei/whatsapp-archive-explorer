@@ -24,7 +24,17 @@ function renderTimeline(props: Partial<React.ComponentProps<typeof Timeline>> = 
   );
   const slider = screen.getByRole("slider", { name: "Timeline" });
   // jsdom has no layout: give the strip a 480 px wide box, 10 px per month
-  slider.getBoundingClientRect = () => ({ left: 0, top: 0, width: 480, height: 44, right: 480, bottom: 44, x: 0, y: 0, toJSON: () => ({}) });
+  slider.getBoundingClientRect = () => ({
+    left: 0,
+    top: 0,
+    width: 480,
+    height: 44,
+    right: 480,
+    bottom: 44,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
   return { onJump, slider, ...view };
 }
 
@@ -91,8 +101,29 @@ describe("Timeline", () => {
     expect(onJump).toHaveBeenLastCalledWith(new Date(2016, 0, 1).getTime() / 1000);
   });
 
+  it("returns the marker to where the chat really is once a key jump has settled", async () => {
+    // the jump fails (e.g. the index is being rebuilt): the view did not move, so neither may the marker
+    const onJump = vi.fn(() => Promise.reject(new Error("503")));
+    const { slider } = renderTimeline({ onJump });
+
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(slider.getAttribute("aria-valuenow")).toBe("47");
+    await vi.waitFor(() => expect(slider.getAttribute("aria-valuenow")).toBe("17"));
+  });
+
+  it("only jumps for the main button", () => {
+    const { slider, onJump } = renderTimeline();
+
+    fireEvent.pointerDown(slider, { clientX: 5, pointerId: 1, button: 2 });
+    fireEvent.pointerUp(slider, { clientX: 5, pointerId: 1, button: 2 });
+
+    expect(onJump).not.toHaveBeenCalled();
+  });
+
   it("marks the months with search hits", () => {
-    const { container } = renderTimeline({ hits: [local(2016, 1, 5), local(2016, 1, 6), local(2019, 12, 20)] });
+    const { container } = renderTimeline({
+      hits: [local(2016, 1, 5), local(2016, 1, 6), local(2019, 12, 20)],
+    });
 
     expect(container.querySelectorAll(".timeline-hit")).toHaveLength(2);
   });
