@@ -4,12 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { api } from "@/lib/api";
 import { displayName, formatDayDivider, sameDay } from "@/lib/format";
+import {
+  buildTimeline,
+  viewerOffsetMinutes,
+  type TimelineDay,
+} from "@/lib/timeline";
 import { useUi } from "@/lib/ui";
-import type { ChatSummary, Message } from "@/lib/types";
+import type { ChatHit, ChatSummary, Message } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { MediaGallery } from "./MediaGallery";
 import { MessageBubble } from "./MessageBubble";
 import { MediaViewer, type ViewerItem } from "./MediaViewer";
+import { Timeline } from "./Timeline";
 
 const START_INDEX = 1_000_000;
 const PAGE = 80;
@@ -34,28 +40,53 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
   const [moreAfter, setMoreAfter] = useState(false);
   const [loadKey, setLoadKey] = useState(0);
   const [highlight, setHighlight] = useState<number | null>(targetId);
+  const [align, setAlign] = useState<"start" | "center" | "end">(
+    targetId === null ? "end" : "center",
+  );
+  const [days, setDays] = useState<{
+    chatId: number;
+    days: TimelineDay[];
+  } | null>(null);
+  /** Timestamp of the topmost visible message: where the timeline marker sits. */
+  const [topTs, setTopTs] = useState<number | null>(null);
   const loading = useRef(false);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<number[]>([]);
+  const [hits, setHits] = useState<ChatHit[]>([]);
   const [hitIndex, setHitIndex] = useState(-1);
   const [galleryOpen, setGalleryOpen] = useState(false);
-  const [viewer, setViewer] = useState<{ items: ViewerItem[]; index: number } | null>(null);
+  const [viewer, setViewer] = useState<{
+    items: ViewerItem[];
+    index: number;
+  } | null>(null);
 
   const load = useCallback(
-    async (cursor: { around?: number; aroundTs?: number }) => {
+    /** `quiet`: a timeline jump: show the moment at the top, without highlighting a message. */
+    async (cursor: { around?: number; aroundTs?: number }, quiet = false) => {
       loading.current = true;
       try {
         const page = await api.messages(chat.id, cursor, PAGE);
-        const target = cursor.around ?? page.items.find((m) => cursor.aroundTs !== undefined && m.ts >= cursor.aroundTs)?.id;
-        const index = target === undefined ? page.items.length - 1 : Math.max(0, page.items.findIndex((m) => m.id === target));
+        const target =
+          cursor.around ??
+          page.items.find(
+            (m) => cursor.aroundTs !== undefined && m.ts >= cursor.aroundTs,
+          )?.id;
+        const index =
+          target === undefined
+            ? page.items.length - 1
+            : Math.max(
+                0,
+                page.items.findIndex((m) => m.id === target),
+              );
         setItems(page.items);
         setFirstIndex(START_INDEX);
         setInitialIndex(Math.max(0, index));
         setMoreBefore(page.hasMoreBefore);
         setMoreAfter(page.hasMoreAfter);
-        setHighlight(target ?? null);
+        setHighlight(quiet ? null : (target ?? null));
+        setAlign(target === undefined ? "end" : quiet ? "start" : "center");
+        setTopTs(page.items[Math.max(0, index)]?.ts ?? null);
         setLoadKey((k) => k + 1);
       } finally {
         loading.current = false;
@@ -68,12 +99,30 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
     void load(targetId === null ? {} : { around: targetId });
   }, [load, targetId]);
 
+  useEffect(() => {
+    const abort = new AbortController();
+    api.timeline(chat.id, viewerOffsetMinutes(), abort.signal).then(
+      (d) => setDays({ chatId: chat.id, days: d }),
+      () => {},
+    );
+    return () => abort.abort();
+  }, [chat.id]);
+  const timeline = useMemo(
+    () => buildTimeline(days?.chatId === chat.id ? days.days : []),
+    [days, chat.id],
+  );
+  const hitTimes = useMemo(() => hits.map((h) => h.ts), [hits]);
+
   const jumpTo = useCallback(
     (messageId: number) => {
       const index = items.findIndex((m) => m.id === messageId);
       if (index >= 0) {
         setHighlight(messageId);
-        virtuoso.current?.scrollToIndex({ index, align: "center", behavior: "auto" });
+        virtuoso.current?.scrollToIndex({
+          index,
+          align: "center",
+          behavior: "auto",
+        });
       } else {
         onTarget(messageId);
       }
@@ -98,7 +147,11 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
     if (!moreAfter || loading.current || items.length === 0) return;
     loading.current = true;
     try {
-      const page = await api.messages(chat.id, { after: items[items.length - 1]!.id }, PAGE);
+      const page = await api.messages(
+        chat.id,
+        { after: items[items.length - 1]!.id },
+        PAGE,
+      );
       setItems((prev) => [...prev, ...page.items]);
       setMoreAfter(page.hasMoreAfter);
     } finally {
@@ -107,41 +160,68 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
   }, [chat.id, items, moreAfter]);
 
   const runSearch = async () => {
-    const ids = q.trim() ? await api.searchInChat(chat.id, q) : [];
-    setHits(ids);
-    const last = ids.length - 1;
+    const found = q.trim() ? await api.searchInChat(chat.id, q) : [];
+    setHits(found);
+    const last = found.length - 1;
     setHitIndex(last);
-    if (last >= 0) jumpTo(ids[last]!);
+    if (last >= 0) jumpTo(found[last]!.id);
   };
 
   const step = (delta: number) => {
     const next = hitIndex + delta;
     if (next < 0 || next >= hits.length) return;
     setHitIndex(next);
-    jumpTo(hits[next]!);
+    jumpTo(hits[next]!.id);
   };
 
   const openMedia = (message: Message) => {
-    const visual = items.filter((m) => m.mediaUrl && /^(image|video)\//.test(m.mime ?? ""));
-    const list: ViewerItem[] = visual.map((m) => ({ id: m.id, ts: m.ts, url: m.mediaUrl!, mime: m.mime, caption: m.caption }));
-    setViewer({ items: list, index: Math.max(0, list.findIndex((i) => i.id === message.id)) });
+    const visual = items.filter(
+      (m) => m.mediaUrl && /^(image|video)\//.test(m.mime ?? ""),
+    );
+    const list: ViewerItem[] = visual.map((m) => ({
+      id: m.id,
+      ts: m.ts,
+      url: m.mediaUrl!,
+      mime: m.mime,
+      caption: m.caption,
+    }));
+    setViewer({
+      items: list,
+      index: Math.max(
+        0,
+        list.findIndex((i) => i.id === message.id),
+      ),
+    });
   };
 
-  const searchTerms = useMemo(() => [...terms, ...(hits.length > 0 ? q.split(/\s+/) : [])], [terms, hits.length, q]);
+  const searchTerms = useMemo(
+    () => [...terms, ...(hits.length > 0 ? q.split(/\s+/) : [])],
+    [terms, hits.length, q],
+  );
   const isGroup = chat.kind === "group";
 
   return (
     <section className="chat">
       <header className="pane-header chat-header">
-        <button type="button" className="icon back" onClick={onBack} aria-label={t("backToList")}>
+        <button
+          type="button"
+          className="icon back"
+          onClick={onBack}
+          aria-label={t("backToList")}
+        >
           ‹
         </button>
         <Avatar chat={chat} size={40} />
         <span className="chat-title">
-          <strong>{chat.kind === "calls" ? t("calls") : displayName(chat)}</strong>
+          <strong>
+            {chat.kind === "calls" ? t("calls") : displayName(chat)}
+          </strong>
           <span className="muted">
             {isGroup ? `${t("groupChat")} · ` : ""}
-            {chat.kind === "private" && /^\d+$/.test(chat.jid.split("@")[0] ?? "") ? `+${chat.jid.split("@")[0]} · ` : ""}
+            {chat.kind === "private" &&
+            /^\d+$/.test(chat.jid.split("@")[0] ?? "")
+              ? `+${chat.jid.split("@")[0]} · `
+              : ""}
             {t("messageCount", { count: chat.messageCount })}
           </span>
         </span>
@@ -154,14 +234,31 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
               onChange={(e) => {
                 // the picker's value is a local calendar day; valueAsDate would be UTC midnight
                 const [y, m, d] = e.target.value.split("-").map(Number);
-                if (y && m && d) void load({ aroundTs: Math.floor(new Date(y, m - 1, d).getTime() / 1000) });
+                if (y && m && d)
+                  void load({
+                    aroundTs: Math.floor(
+                      new Date(y, m - 1, d).getTime() / 1000,
+                    ),
+                  });
               }}
             />
           </label>
-          <button type="button" className="icon" onClick={() => setGalleryOpen((v) => !v)} aria-label={t("media")} title={t("media")}>
+          <button
+            type="button"
+            className="icon"
+            onClick={() => setGalleryOpen((v) => !v)}
+            aria-label={t("media")}
+            title={t("media")}
+          >
             🖼
           </button>
-          <button type="button" className="icon" onClick={() => setSearchOpen((v) => !v)} aria-label={t("searchInChat")} title={t("searchInChat")}>
+          <button
+            type="button"
+            className="icon"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label={t("searchInChat")}
+            title={t("searchInChat")}
+          >
             🔍
           </button>
         </span>
@@ -175,18 +272,48 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
             void runSearch();
           }}
         >
-          <input autoFocus type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("searchInChat")} aria-label={t("searchInChat")} />
+          <input
+            autoFocus
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("searchInChat")}
+            aria-label={t("searchInChat")}
+          />
           <span className="muted hit-count">
-            {hits.length === 0 ? (q && hitIndex === -1 ? t("noHits") : "") : t("hitCount", { current: hitIndex + 1, total: hits.length })}
+            {hits.length === 0
+              ? q && hitIndex === -1
+                ? t("noHits")
+                : ""
+              : t("hitCount", { current: hitIndex + 1, total: hits.length })}
           </span>
-          <button type="button" className="icon" onClick={() => step(-1)} disabled={hitIndex <= 0} aria-label={t("previous")}>
+          <button
+            type="button"
+            className="icon"
+            onClick={() => step(-1)}
+            disabled={hitIndex <= 0}
+            aria-label={t("previous")}
+          >
             ▲
           </button>
-          <button type="button" className="icon" onClick={() => step(1)} disabled={hitIndex < 0 || hitIndex >= hits.length - 1} aria-label={t("next")}>
+          <button
+            type="button"
+            className="icon"
+            onClick={() => step(1)}
+            disabled={hitIndex < 0 || hitIndex >= hits.length - 1}
+            aria-label={t("next")}
+          >
             ▼
           </button>
         </form>
       )}
+
+      <Timeline
+        timeline={timeline}
+        currentTs={topTs}
+        hits={hitTimes}
+        onJump={(ts) => void load({ aroundTs: ts }, true)}
+      />
 
       <div className="chat-body">
         {items.length === 0 ? (
@@ -198,7 +325,11 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
             className="messages"
             data={items}
             firstItemIndex={firstIndex}
-            initialTopMostItemIndex={{ index: initialIndex, align: highlight === null ? "end" : "center" }}
+            initialTopMostItemIndex={{ index: initialIndex, align }}
+            rangeChanged={(range) => {
+              const top = items[range.startIndex - firstIndex];
+              if (top) setTopTs(top.ts);
+            }}
             startReached={() => void older()}
             endReached={() => void newer()}
             computeItemKey={(_, m) => m.id}
@@ -207,7 +338,9 @@ export function ChatView({ chat, targetId, terms, onTarget, onBack }: Props) {
               const prev = items[index - firstIndex - 1];
               return (
                 <>
-                  {(!prev || !sameDay(prev.ts, m.ts)) && <DayDivider ts={m.ts} />}
+                  {(!prev || !sameDay(prev.ts, m.ts)) && (
+                    <DayDivider ts={m.ts} />
+                  )}
                   <MessageBubble
                     message={m}
                     isGroup={isGroup}

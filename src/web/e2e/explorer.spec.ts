@@ -43,6 +43,26 @@ test("searches inside a chat with next and previous", async ({ page }) => {
   await expect(page.locator(".bubble.highlighted")).toContainText(/good/i);
 });
 
+test("travels through the chat with the timeline", async ({ page }) => {
+  await page.locator(".chat-row").nth(1).click();
+  const timeline = page.getByRole("slider", { name: "Timeline" });
+  await expect(timeline).toBeVisible();
+  const last = await timeline.getAttribute("aria-valuemax");
+  await expect(timeline).toHaveAttribute("aria-valuenow", last!); // opens at the newest messages
+
+  const box = (await timeline.boundingBox())!;
+  await page.mouse.move(box.x + 2, box.y + box.height / 2);
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(timeline).toHaveAttribute("aria-valuenow", "0");
+  await expect(page.locator(".bubble").first()).toBeInViewport();
+  await expect(page.locator(".bubble.highlighted")).toHaveCount(0); // a timeline jump marks nothing
+
+  await timeline.press("End");
+  await expect(timeline).toHaveAttribute("aria-valuenow", last!);
+});
+
 test("opens an image in the viewer", async ({ page }) => {
   await page.locator(".chat-row").nth(1).click();
   await page.getByRole("button", { name: "Media" }).click();

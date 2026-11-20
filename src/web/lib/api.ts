@@ -1,4 +1,5 @@
-import type { ChatSummary, MediaItem, Message, Page, SearchFilters, SearchHit, Status } from "./types";
+import type { TimelineDay } from "./timeline";
+import type { ChatHit, ChatSummary, MediaItem, Message, Page, SearchFilters, SearchHit, Status } from "./types";
 
 export class IndexingError extends Error {}
 
@@ -29,7 +30,9 @@ export const api = {
     signal?: AbortSignal,
   ) => get<Page<Message>>(`/api/chats/${chatId}/messages${query({ ...cursor, limit })}`, signal),
   searchInChat: (chatId: number, q: string, signal?: AbortSignal) =>
-    get<number[]>(`/api/chats/${chatId}/search${query({ q })}`, signal),
+    get<ChatHit[]>(`/api/chats/${chatId}/search${query({ q })}`, signal),
+  timeline: (chatId: number, tz: number, signal?: AbortSignal) =>
+    get<TimelineDay[]>(`/api/chats/${chatId}/timeline${query({ tz })}`, signal),
   search: (q: string, filters: SearchFilters, offset = 0, signal?: AbortSignal) =>
     get<{ hits: SearchHit[]; total: number }>(`/api/search${query({ q, ...filters, offset })}`, signal),
   media: (chatId: number, offset = 0, limit = 60, signal?: AbortSignal) =>

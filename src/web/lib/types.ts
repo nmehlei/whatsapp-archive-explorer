@@ -40,6 +40,12 @@ export interface Page<T> {
   hasMoreAfter: boolean;
 }
 
+/** A search hit inside one chat. */
+export interface ChatHit {
+  id: number;
+  ts: number;
+}
+
 export interface SearchHit {
   chatId: number;
   chatName: string | null;

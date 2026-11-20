@@ -17,6 +17,9 @@ It reads the output of [WhatsApp-Chat-Exporter](https://github.com/KnugiHK/Whats
   `muller` finds `Müller`).
 - **Chats** — bubbles, group sender names, day dividers, replies (click to jump to the original), reactions,
   photos, videos, voice messages, documents, contact cards, calls, system messages.
+- **Timeline** — above every chat, its whole life at a glance: one bar per month (per day for short chats),
+  height = how much you wrote. Click or drag to travel years back in one move; search hits show as dots; arrow
+  keys step to the previous/next month with messages.
 - **Search on every level** — across all chats (grouped results with highlighted snippets, filters for sender,
   date range and media; click a hit to open the chat right there), inside a chat (next/previous), jump to a date.
   Words, numbers like `3.5`, email addresses and links are found; emoji are not searchable.
