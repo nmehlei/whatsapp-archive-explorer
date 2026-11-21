@@ -56,12 +56,18 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: src/web/package-lock.json
-      - name: Version (GitVersion 5, Mainline)
+      - name: Version (from the release tag)
         id: version
         shell: bash
+        # A release is a v<semver> tag, so the tag is the version. (GitVersion sees a tag checkout as a branch
+        # "tags/v…" and, on Windows, isn't on PATH in the step that installs it.)
         run: |
-          dotnet tool install --global GitVersion.Tool --version 5.12.0
-          echo "semver=$(dotnet-gitversion /showvariable SemVer)" >> "$GITHUB_OUTPUT"
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not v<major>.<minor>.<patch>[-prerelease]"
+            exit 1
+          fi
+          echo "semver=$version" >> "$GITHUB_OUTPUT"
       - name: Publish
         shell: bash
         run: |
@@ -108,3 +114,4 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
