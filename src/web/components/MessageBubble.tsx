@@ -42,7 +42,7 @@ function MediaContent({ message, onOpenMedia }: { message: Message; onOpenMedia?
     case "audio":
       return (
         <span className="media-audio">
-          <audio src={message.mediaUrl} controls preload="none" aria-label={t("voiceMessage")} />
+          <audio src={message.mediaUrl} controls preload="metadata" aria-label={t("voiceMessage")} />
           <a href={message.mediaUrl} download>
             {t("download")}
           </a>

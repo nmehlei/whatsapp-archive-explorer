@@ -2,13 +2,21 @@ namespace ArchiveExplorer.Demo;
 
 public static class Program
 {
-    /// <summary>dotnet run --project src/DemoArchive -- &lt;target dir&gt; [--single-file] [--chats N] [--messages N]</summary>
+    /// <summary>dotnet run --project src/DemoArchive -- &lt;target dir&gt; [--single-file] [--chats N] [--messages N] | --showcase</summary>
     public static int Main(string[] args)
     {
         if (args.Length == 0 || args[0].StartsWith('-'))
         {
-            Console.Error.WriteLine("usage: DemoArchive <target dir> [--single-file] [--chats N] [--messages N]");
+            Console.Error.WriteLine("usage: DemoArchive <target dir> [--single-file] [--chats N] [--messages N] | --showcase");
             return 2;
+        }
+
+        if (args.Contains("--showcase"))
+        {
+            var showcase = ShowcaseArchiveWriter.Write(args[0]);
+            Console.WriteLine($"showcase archive: {showcase.Chats} chats, {showcase.Messages} messages, " +
+                              $"{showcase.MediaFiles} media files in {Path.GetFullPath(args[0])}");
+            return 0;
         }
 
         var options = new DemoOptions(

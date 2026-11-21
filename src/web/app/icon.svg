@@ -1,1 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="30" r="24" fill="#0a7f6f"/><path d="M14 54l6-14h12z" fill="#0a7f6f"/><rect x="20" y="22" width="24" height="4" rx="2" fill="#fff"/><rect x="20" y="31" width="16" height="4" rx="2" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="whatsapp-archive-explorer logo">
+  <defs>
+    <linearGradient id="wae-bg" x1="12" y1="10" x2="116" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1BAE91"/>
+      <stop offset="1" stop-color="#0A5A50"/>
+    </linearGradient>
+  </defs>
+  <!-- a speech bubble holding a chat's timeline: years of messages, the moment you jump to in amber -->
+  <rect x="8" y="10" width="112" height="90" rx="28" fill="url(#wae-bg)"/>
+  <path d="M106 84 C104 102 108 112 116 121 C100 117 84 108 70 96 Z" fill="url(#wae-bg)"/>
+  <g fill="#FFFFFF">
+    <rect x="25" y="62" width="9" height="20" rx="4.5" opacity=".75"/>
+    <rect x="38" y="48" width="9" height="34" rx="4.5" opacity=".85"/>
+    <rect x="51" y="56" width="9" height="26" rx="4.5" opacity=".8"/>
+    <rect x="77" y="52" width="9" height="30" rx="4.5" opacity=".85"/>
+    <rect x="90" y="40" width="9" height="42" rx="4.5" opacity=".95"/>
+  </g>
+  <rect x="64" y="30" width="9" height="52" rx="4.5" fill="#FFC145"/>
+</svg>

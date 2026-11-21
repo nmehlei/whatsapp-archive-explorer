@@ -317,70 +317,17 @@ public static class DemoArchiveWriter
     private static byte[] Png(Random random, int size)
     {
         var (r, g, b) = ((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256));
-        var raw = new byte[size * (size * 3 + 1)];
+        var rgb = new byte[size * size * 3];
         for (var y = 0; y < size; y++)
         {
-            var row = y * (size * 3 + 1);
-            raw[row] = 0; // filter: none
             for (var x = 0; x < size; x++)
             {
-                raw[row + 1 + x * 3] = (byte)(r + x * 4);
-                raw[row + 2 + x * 3] = (byte)(g + y * 4);
-                raw[row + 3 + x * 3] = b;
+                var i = (y * size + x) * 3;
+                rgb[i] = (byte)(r + x * 4);
+                rgb[i + 1] = (byte)(g + y * 4);
+                rgb[i + 2] = b;
             }
         }
-
-        using var idat = new MemoryStream();
-        using (var z = new ZLibStream(idat, CompressionLevel.SmallestSize, leaveOpen: true))
-        {
-            z.Write(raw);
-        }
-
-        using var png = new MemoryStream();
-        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-        var header = new byte[13];
-        WriteBigEndian(header, 0, (uint)size);
-        WriteBigEndian(header, 4, (uint)size);
-        header[8] = 8; // bit depth
-        header[9] = 2; // colour type: RGB
-        Chunk(png, "IHDR", header);
-        Chunk(png, "IDAT", idat.ToArray());
-        Chunk(png, "IEND", []);
-        return png.ToArray();
-    }
-
-    private static void Chunk(Stream s, string type, byte[] data)
-    {
-        var length = new byte[4];
-        WriteBigEndian(length, 0, (uint)data.Length);
-        s.Write(length);
-        var typeBytes = Encoding.ASCII.GetBytes(type);
-        s.Write(typeBytes);
-        s.Write(data);
-        var crc = new byte[4];
-        WriteBigEndian(crc, 0, Crc32([.. typeBytes, .. data]));
-        s.Write(crc);
-    }
-
-    private static void WriteBigEndian(byte[] target, int offset, uint value)
-    {
-        target[offset] = (byte)(value >> 24);
-        target[offset + 1] = (byte)(value >> 16);
-        target[offset + 2] = (byte)(value >> 8);
-        target[offset + 3] = (byte)value;
-    }
-
-    private static uint Crc32(byte[] data)
-    {
-        var crc = 0xFFFFFFFFu;
-        foreach (var b in data)
-        {
-            crc ^= b;
-            for (var k = 0; k < 8; k++)
-            {
-                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
-            }
-        }
-        return ~crc;
+        return PngEncoder.Encode(size, size, rgb, CompressionLevel.SmallestSize);
     }
 }

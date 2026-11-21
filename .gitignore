@@ -27,9 +27,11 @@ archive*/
 samples-private/
 demo-archive/
 
-# local agent workspace
 
 # web test output
 src/web/test-results/
 src/web/playwright-report/
 src/web/tsconfig.tsbuildinfo
+
+# README showcase archive (npm run screenshots writes to the temp folder)
+showcase/

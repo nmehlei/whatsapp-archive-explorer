@@ -19,6 +19,10 @@ If a bug only shows with your data, describe the *shape* (field names, types, co
 - `dotnet test` runs the backend tests; `npm test` in `src/web` the UI tests; `npx playwright test` the
   end-to-end tests against a demo archive.
 - `dotnet run --project src/Explorer -- ./demo-archive` starts the explorer on the demo data.
+- Screenshots come only from the scripted showcase archive (`src/DemoArchive --showcase`): change the script in
+  `src/DemoArchive/ShowcaseArchiveWriter.cs` or `src/web/screenshots/readme.spec.ts`, then run
+  `npm run screenshots` in `src/web` (macOS or Linux shell; the pictures in the repo are taken on macOS, whose
+  emoji font they show) and compress the PNGs (e.g. `pngquant --quality 80-95 --ext .png --force`).
 
 ## Pull requests
 
